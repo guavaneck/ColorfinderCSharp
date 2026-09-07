@@ -44,6 +44,24 @@ public sealed class FileSystemServiceTests : IDisposable
             new FileSystemService().CreateDirectoryAsync(_root, "nested/folder"));
     }
 
+    [Fact]
+    public async Task CopiesAndMovesFilesBetweenDirectories()
+    {
+        var sourceDirectory = Directory.CreateDirectory(Path.Combine(_root, "source")).FullName;
+        var copyDirectory = Directory.CreateDirectory(Path.Combine(_root, "copies")).FullName;
+        var moveDirectory = Directory.CreateDirectory(Path.Combine(_root, "moved")).FullName;
+        var source = Path.Combine(sourceDirectory, "document.txt");
+        await File.WriteAllTextAsync(source, "content");
+        var service = new FileSystemService();
+
+        var copied = await service.CopyAsync(source, copyDirectory);
+        var moved = await service.MoveAsync(source, moveDirectory);
+
+        Assert.Equal("content", await File.ReadAllTextAsync(copied));
+        Assert.Equal("content", await File.ReadAllTextAsync(moved));
+        Assert.False(File.Exists(source));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);

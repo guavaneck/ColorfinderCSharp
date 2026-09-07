@@ -73,6 +73,20 @@ public sealed class JsonColorServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RemovingFolderMetadataAlsoRemovesDescendantTags()
+    {
+        var service = new JsonColorService(Path.Combine(_root, "colors.json"));
+        var folder = Path.Combine(_root, "folder");
+        var child = Path.Combine(folder, "child.txt");
+        await service.AssignColorsAsync([folder, child], "orange");
+
+        await service.RemoveMetadataAsync(folder);
+
+        Assert.Null(await service.GetColorAsync(folder));
+        Assert.Null(await service.GetColorAsync(child));
+    }
+
+    [Fact]
     public async Task RemoveDeletesAssignment()
     {
         var service = new JsonColorService(Path.Combine(_root, "colors.json"));

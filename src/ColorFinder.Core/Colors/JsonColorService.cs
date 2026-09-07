@@ -92,6 +92,17 @@ public sealed class JsonColorService : IColorService
     public Task CopyMetadataAsync(string sourcePath, string destinationPath, CancellationToken cancellationToken = default) =>
         TransferMetadataAsync(sourcePath, destinationPath, removeSource: false, cancellationToken);
 
+    public Task RemoveMetadataAsync(string path, CancellationToken cancellationToken = default)
+    {
+        var source = NormalizePath(path);
+        var prefix = source.EndsWith(Path.DirectorySeparatorChar) ? source : source + Path.DirectorySeparatorChar;
+        return MutateAsync(data =>
+        {
+            foreach (var key in data.Keys.Where(key => PathsEqual(key, source) || key.StartsWith(prefix, PathComparison)).ToArray())
+                data.Remove(key);
+        }, cancellationToken);
+    }
+
     private async Task MutateAsync(Action<Dictionary<string, ColorMetadata>> mutation, CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken);

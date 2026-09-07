@@ -1,6 +1,9 @@
 const state = { snapshot: null, selectedPaths: new Set(), anchorIndex: -1, home: null, view: 'grid', pending: new Map() };
 const entriesElement = document.querySelector('#entries');
 const contextMenu = document.querySelector('#context-menu');
+const appDialog = document.querySelector('#app-dialog');
+const dialogInput = document.querySelector('#dialog-input');
+let resolveDialog = null;
 
 function receiveBridgeMessage(message) {
   let response;
@@ -132,6 +135,8 @@ function showContextMenu(x, y, emptySpace) {
   document.querySelector('#context-open').hidden = emptySpace;
   document.querySelector('#context-rename').hidden = emptySpace;
   document.querySelector('#context-duplicate').hidden = emptySpace;
+  document.querySelector('#context-copy').hidden = emptySpace;
+  document.querySelector('#context-move').hidden = emptySpace;
   document.querySelector('#context-item-options').hidden = emptySpace;
   document.querySelector('#context-new-folder').hidden = !emptySpace;
   document.querySelector('#context-open').disabled = count !== 1;
@@ -159,14 +164,14 @@ function selectedEntries() {
 }
 
 async function createFolder() {
-  const name = prompt('New folder name');
+  const name = await askForText('New Folder', 'Enter a name for the new folder.');
   if (name?.trim()) await refresh('filesystem.createDirectory', { name });
 }
 
 async function renameSelected() {
   const selected = selectedEntries();
   if (selected.length !== 1) return;
-  const name = prompt('Rename item', selected[0].name);
+  const name = await askForText('Rename', `Enter a new name for “${selected[0].name}”.`, selected[0].name, 'Rename');
   if (name?.trim() && name !== selected[0].name)
     await refresh('filesystem.rename', { path: selected[0].fullPath, name });
 }
@@ -175,6 +180,59 @@ async function duplicateSelected() {
   const selected = selectedEntries();
   if (selected.length !== 1) return;
   await refresh('filesystem.duplicate', { path: selected[0].fullPath });
+}
+
+async function transferSelected(action) {
+  const verb = action === 'filesystem.copy' ? 'Copy' : 'Move';
+  const destination = await askForText(`${verb} To`, `Enter the destination folder for ${selectionDescription()}.`, state.snapshot.path, verb);
+  if (destination?.trim())
+    await refresh(action, { paths: [...state.selectedPaths], destination: destination.trim() });
+}
+
+async function trashSelected() {
+  const count = state.selectedPaths.size;
+  if (!count || !await askForConfirmation('Move to Trash', `Move ${selectionDescription()} to Trash?`, 'Move to Trash')) return;
+  await refresh('filesystem.trash', { paths: [...state.selectedPaths] });
+}
+
+async function assignShortcutColor(colorId) {
+  if (state.selectedPaths.size)
+    await refresh('color.assign', { paths: [...state.selectedPaths], color: colorId });
+}
+
+function selectionDescription() {
+  const selected = selectedEntries();
+  return selected.length === 1 ? `“${selected[0].name}”` : `${selected.length} selected items`;
+}
+
+function showDialog({ title, message, value = null, confirmLabel = 'OK', danger = false }) {
+  if (resolveDialog) finishDialog(null);
+  document.querySelector('#dialog-title').textContent = title;
+  document.querySelector('#dialog-message').textContent = message;
+  const confirmButton = document.querySelector('#dialog-confirm');
+  confirmButton.textContent = confirmLabel;
+  confirmButton.classList.toggle('danger', danger);
+  dialogInput.hidden = value === null;
+  dialogInput.required = value !== null;
+  dialogInput.value = value ?? '';
+  appDialog.showModal();
+  value === null ? confirmButton.focus() : (dialogInput.focus(), dialogInput.select());
+  return new Promise(resolve => { resolveDialog = resolve; });
+}
+
+function finishDialog(value) {
+  const resolve = resolveDialog;
+  resolveDialog = null;
+  appDialog.close();
+  resolve?.(value);
+}
+
+function askForText(title, message, value = '', confirmLabel = 'Create') {
+  return showDialog({ title, message, value, confirmLabel });
+}
+
+function askForConfirmation(title, message, confirmLabel) {
+  return showDialog({ title, message, confirmLabel, danger:true });
 }
 
 async function openSelected() {
@@ -204,7 +262,22 @@ document.querySelector('#context-open').onclick = () => openSelected().catch(sho
 document.querySelector('#context-clear').onclick = () => refresh('color.remove', { paths: [...state.selectedPaths] });
 document.querySelector('#context-rename').onclick = () => renameSelected().catch(showError);
 document.querySelector('#context-duplicate').onclick = () => duplicateSelected().catch(showError);
+document.querySelector('#context-copy').onclick = () => transferSelected('filesystem.copy').catch(showError);
+document.querySelector('#context-move').onclick = () => transferSelected('filesystem.move').catch(showError);
+document.querySelector('#context-trash').onclick = () => trashSelected().catch(showError);
 document.querySelector('#context-new-folder').onclick = () => createFolder().catch(showError);
+document.querySelector('#dialog-form').onsubmit = event => {
+  event.preventDefault();
+  if (!dialogInput.hidden && !dialogInput.value.trim()) {
+    dialogInput.setCustomValidity('A value is required.');
+    dialogInput.reportValidity();
+    return;
+  }
+  dialogInput.setCustomValidity('');
+  finishDialog(dialogInput.hidden ? true : dialogInput.value.trim());
+};
+document.querySelector('#dialog-cancel').onclick = () => finishDialog(null);
+appDialog.oncancel = event => { event.preventDefault(); finishDialog(null); };
 entriesElement.onclick = event => {
   if (event.target === entriesElement) { clearSelection(); closeContextMenu(); render(); }
 };
@@ -219,6 +292,7 @@ document.addEventListener('pointerdown', event => {
   if (!contextMenu.hidden && !contextMenu.contains(event.target)) closeContextMenu();
 });
 document.addEventListener('keydown', event => {
+  const modifier = event.ctrlKey || event.metaKey;
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
     event.preventDefault();
     state.selectedPaths = new Set(state.snapshot.entries.map(entry => entry.fullPath));
@@ -232,6 +306,24 @@ document.addEventListener('keydown', event => {
     const selected = entriesElement.querySelector('.entry.selected');
     const bounds = selected?.getBoundingClientRect() ?? entriesElement.getBoundingClientRect();
     showContextMenu(bounds.left + 16, bounds.top + 16, !selected);
+  } else if (event.key === 'F2' && state.selectedPaths.size === 1) {
+    event.preventDefault();
+    renameSelected().catch(showError);
+  } else if (modifier && event.key.toLowerCase() === 'd' && state.selectedPaths.size === 1) {
+    event.preventDefault();
+    duplicateSelected().catch(showError);
+  } else if (event.key === 'Delete' && state.selectedPaths.size) {
+    event.preventDefault();
+    trashSelected().catch(showError);
+  } else if (modifier && event.shiftKey && event.key.toLowerCase() === 'n') {
+    event.preventDefault();
+    createFolder().catch(showError);
+  } else if (modifier && /^[0-6]$/.test(event.key) && state.selectedPaths.size) {
+    event.preventDefault();
+    const colors = { '1':'red', '2':'orange', '3':'yellow', '4':'green', '5':'blue', '6':'purple' };
+    event.key === '0'
+      ? refresh('color.remove', { paths:[...state.selectedPaths] })
+      : assignShortcutColor(colors[event.key]);
   }
 });
 for (const view of ['grid', 'list']) document.querySelector(`#${view}-view`).onclick = () => {

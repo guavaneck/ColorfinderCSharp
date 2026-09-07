@@ -16,4 +16,35 @@ public sealed class PlatformService : IPlatformService
         startInfo.ArgumentList.Add(fullPath);
         Process.Start(startInfo)?.Dispose();
     }
+
+    public async Task MoveToTrashAsync(string path, CancellationToken cancellationToken = default)
+    {
+        var fullPath = Path.GetFullPath(path);
+        if (!File.Exists(fullPath) && !Directory.Exists(fullPath))
+            throw new FileNotFoundException("The item no longer exists.", fullPath);
+
+        ProcessStartInfo startInfo;
+        if (OperatingSystem.IsLinux())
+        {
+            startInfo = new ProcessStartInfo("gio") { UseShellExecute = false };
+            startInfo.ArgumentList.Add("trash");
+            startInfo.ArgumentList.Add(fullPath);
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            startInfo = new ProcessStartInfo("osascript") { UseShellExecute = false };
+            startInfo.ArgumentList.Add("-e");
+            startInfo.ArgumentList.Add("on run argv");
+            startInfo.ArgumentList.Add("-e");
+            startInfo.ArgumentList.Add("tell application \"Finder\" to delete POSIX file (item 1 of argv)");
+            startInfo.ArgumentList.Add("-e");
+            startInfo.ArgumentList.Add("end run");
+            startInfo.ArgumentList.Add(fullPath);
+        }
+        else throw new PlatformNotSupportedException("ColorFinder currently supports Linux and macOS.");
+
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start the system trash command.");
+        await process.WaitForExitAsync(cancellationToken);
+        if (process.ExitCode != 0) throw new IOException("The operating system could not move the item to trash.");
+    }
 }

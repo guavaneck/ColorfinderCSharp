@@ -52,6 +52,26 @@ public sealed class FileSystemService : IFileSystemService
             return destination;
         }, cancellationToken);
 
+    public Task<string> CopyAsync(string sourcePath, string destinationDirectory, CancellationToken cancellationToken = default) =>
+        Task.Run(() =>
+        {
+            var source = RequireExistingItem(sourcePath);
+            var destination = DestinationPath(source, destinationDirectory);
+            if (Directory.Exists(source)) CopyDirectory(source, destination, cancellationToken);
+            else File.Copy(source, destination);
+            return destination;
+        }, cancellationToken);
+
+    public Task<string> MoveAsync(string sourcePath, string destinationDirectory, CancellationToken cancellationToken = default) =>
+        Task.Run(() =>
+        {
+            var source = RequireExistingItem(sourcePath);
+            var destination = DestinationPath(source, destinationDirectory);
+            if (Directory.Exists(source)) Directory.Move(source, destination);
+            else File.Move(source, destination);
+            return destination;
+        }, cancellationToken);
+
     private static FileEntry ToEntry(FileSystemInfo info)
     {
         var isDirectory = info is DirectoryInfo;
@@ -83,6 +103,24 @@ public sealed class FileSystemService : IFileSystemService
             var candidate = Path.Combine(parent, stem + suffix + extension);
             if (!File.Exists(candidate) && !Directory.Exists(candidate)) return candidate;
         }
+    }
+
+    private string DestinationPath(string source, string destinationDirectory)
+    {
+        var directory = Path.GetFullPath(destinationDirectory);
+        if (!Directory.Exists(directory)) throw new DirectoryNotFoundException(directory);
+        if (Directory.Exists(source) && directory.StartsWith(source + Path.DirectorySeparatorChar,
+                OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase))
+            throw new IOException("A folder cannot be copied or moved inside itself.");
+        var destination = Path.Combine(directory, Path.GetFileName(source));
+        if (Exists(destination)) throw new IOException($"'{Path.GetFileName(source)}' already exists in the destination.");
+        return destination;
+    }
+
+    private string RequireExistingItem(string path)
+    {
+        var fullPath = Path.GetFullPath(path);
+        return Exists(fullPath) ? fullPath : throw new FileNotFoundException("The item no longer exists.", fullPath);
     }
 
     private static void CopyDirectory(string source, string destination, CancellationToken cancellationToken)

@@ -38,6 +38,9 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
         "filesystem.createDirectory" => await CreateDirectoryAsync(request),
         "filesystem.rename" => await RenameAsync(request),
         "filesystem.duplicate" => await DuplicateAsync(request),
+        "filesystem.copy" => await CopyAsync(request),
+        "filesystem.move" => await MoveAsync(request),
+        "filesystem.trash" => await TrashAsync(request),
         "color.assign" => await AssignColorAsync(request),
         "color.remove" => await RemoveColorAsync(request),
         "color.list" => ColorTag.BuiltIn,
@@ -93,6 +96,38 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
         var source = RequiredString(request, "path");
         var destination = await fileSystem.DuplicateAsync(source);
         await colors.CopyMetadataAsync(source, destination);
+        return await DirectorySnapshotAsync(navigation.CurrentPath);
+    }
+
+    private async Task<object> CopyAsync(BridgeRequest request)
+    {
+        var destinationDirectory = RequiredString(request, "destination");
+        foreach (var source in RequiredPaths(request))
+        {
+            var destination = await fileSystem.CopyAsync(source, destinationDirectory);
+            await colors.CopyMetadataAsync(source, destination);
+        }
+        return await DirectorySnapshotAsync(navigation.CurrentPath);
+    }
+
+    private async Task<object> MoveAsync(BridgeRequest request)
+    {
+        var destinationDirectory = RequiredString(request, "destination");
+        foreach (var source in RequiredPaths(request))
+        {
+            var destination = await fileSystem.MoveAsync(source, destinationDirectory);
+            await colors.MoveMetadataAsync(source, destination);
+        }
+        return await DirectorySnapshotAsync(navigation.CurrentPath);
+    }
+
+    private async Task<object> TrashAsync(BridgeRequest request)
+    {
+        foreach (var path in RequiredPaths(request))
+        {
+            await platform.MoveToTrashAsync(path);
+            await colors.RemoveMetadataAsync(path);
+        }
         return await DirectorySnapshotAsync(navigation.CurrentPath);
     }
 

@@ -11,4 +11,5 @@ public interface IColorService
     Task<IReadOnlyList<ColorMetadata>> GetFilesByColorAsync(string colorId, CancellationToken cancellationToken = default);
     Task MoveMetadataAsync(string oldPath, string newPath, CancellationToken cancellationToken = default);
     Task CopyMetadataAsync(string sourcePath, string destinationPath, CancellationToken cancellationToken = default);
+    Task RemoveMetadataAsync(string path, CancellationToken cancellationToken = default);
 }

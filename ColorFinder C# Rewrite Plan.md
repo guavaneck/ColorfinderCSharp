@@ -1307,12 +1307,12 @@ Add:
 
 - [x] Rename
 - [x] Create folder
-- [ ] Copy
-- [ ] Move
+- [x] Copy
+- [x] Move
 - [x] Duplicate
-- [ ] Delete
+- [x] Move to trash
 - [x] Context menus
-- [ ] Keyboard shortcuts
+- [x] Keyboard shortcuts
 
 ### Color Improvements
 
@@ -1320,7 +1320,7 @@ Add:
 
 - [x] Multi-selection color assignment
 - [x] Preserve color during rename
-- [ ] Preserve color during move
+- [x] Preserve color during move
 - [x] Copy color during duplication
 
 Begin establishing the final color workflow.
