@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../ColorFinder.Core/ColorFinder.Core.csproj" />
+    <PackageReference Include="Photino.NET" Version="4.0.16" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="../ColorFinder.UI/**/*">
+      <Link>ui/%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+</Project>

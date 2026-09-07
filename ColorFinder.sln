@@ -1,0 +1,30 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ColorFinder.Core", "src/ColorFinder.Core/ColorFinder.Core.csproj", "{99C1BC83-84B2-4B1D-91D4-970192A64D9E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ColorFinder.Desktop", "src/ColorFinder.Desktop/ColorFinder.Desktop.csproj", "{A682192A-E54C-4F95-A05A-CE77B8F7EA51}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ColorFinder.Core.Tests", "tests/ColorFinder.Core.Tests/ColorFinder.Core.Tests.csproj", "{58C88645-E081-42DE-9140-4599468F73CE}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{99C1BC83-84B2-4B1D-91D4-970192A64D9E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{99C1BC83-84B2-4B1D-91D4-970192A64D9E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{99C1BC83-84B2-4B1D-91D4-970192A64D9E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{99C1BC83-84B2-4B1D-91D4-970192A64D9E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A682192A-E54C-4F95-A05A-CE77B8F7EA51}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A682192A-E54C-4F95-A05A-CE77B8F7EA51}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A682192A-E54C-4F95-A05A-CE77B8F7EA51}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A682192A-E54C-4F95-A05A-CE77B8F7EA51}.Release|Any CPU.Build.0 = Release|Any CPU
+		{58C88645-E081-42DE-9140-4599468F73CE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{58C88645-E081-42DE-9140-4599468F73CE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{58C88645-E081-42DE-9140-4599468F73CE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{58C88645-E081-42DE-9140-4599468F73CE}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
