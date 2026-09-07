@@ -3,7 +3,10 @@ const entriesElement = document.querySelector('#entries');
 const contextMenu = document.querySelector('#context-menu');
 const appDialog = document.querySelector('#app-dialog');
 const dialogInput = document.querySelector('#dialog-input');
+const folderPicker = document.querySelector('#folder-picker');
 let resolveDialog = null;
+let resolveFolderPicker = null;
+let pickerSnapshot = null;
 
 function receiveBridgeMessage(message) {
   let response;
@@ -11,7 +14,13 @@ function receiveBridgeMessage(message) {
   const pending = state.pending.get(response.id);
   if (!pending) return;
   state.pending.delete(response.id);
-  response.ok ? pending.resolve(response.result) : pending.reject(new Error(response.error));
+  if (response.ok) pending.resolve(response.result);
+  else {
+    const error = new Error(response.error);
+    error.code = response.code;
+    error.details = response.details;
+    pending.reject(error);
+  }
 }
 
 window.external.receiveMessage(receiveBridgeMessage);
@@ -184,9 +193,27 @@ async function duplicateSelected() {
 
 async function transferSelected(action) {
   const verb = action === 'filesystem.copy' ? 'Copy' : 'Move';
-  const destination = await askForText(`${verb} To`, `Enter the destination folder for ${selectionDescription()}.`, state.snapshot.path, verb);
-  if (destination?.trim())
-    await refresh(action, { paths: [...state.selectedPaths], destination: destination.trim() });
+  const destination = await chooseFolder(`${verb} ${selectionDescription()} To`, state.snapshot.path);
+  if (!destination) return;
+  const sources = [...state.selectedPaths];
+  for (const source of sources) {
+    let name = null;
+    while (true) {
+      try {
+        await invoke(action, { paths:[source], destination, ...(name ? { name } : {}) });
+        break;
+      } catch (error) {
+        if (error.code !== 'destinationExists') throw error;
+        name = await askForText(
+          `${verb} with a New Name`,
+          `“${error.details.name}” already exists in that folder. Enter a different name.`,
+          error.details.name,
+          verb);
+        if (!name) return;
+      }
+    }
+  }
+  await refresh('filesystem.listDirectory', { path:state.snapshot.path });
 }
 
 async function trashSelected() {
@@ -235,6 +262,47 @@ function askForConfirmation(title, message, confirmLabel) {
   return showDialog({ title, message, confirmLabel, danger:true });
 }
 
+function chooseFolder(title, initialPath) {
+  document.querySelector('#picker-title').textContent = title;
+  folderPicker.showModal();
+  return new Promise((resolve, reject) => {
+    resolveFolderPicker = resolve;
+    loadPickerDirectory(initialPath).catch(error => {
+      finishFolderPicker(null);
+      reject(error);
+    });
+  });
+}
+
+async function loadPickerDirectory(path) {
+  pickerSnapshot = await invoke('filesystem.listDirectories', { path });
+  document.querySelector('#picker-path').textContent = pickerSnapshot.path;
+  document.querySelector('#picker-up').disabled = !pickerSnapshot.parent;
+  const elements = pickerSnapshot.directories.map(directory => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'picker-folder';
+    button.innerHTML = '<span>📁</span><span></span>';
+    button.lastElementChild.textContent = directory.name;
+    button.onclick = () => loadPickerDirectory(directory.fullPath).catch(showError);
+    return button;
+  });
+  if (!elements.length) {
+    const empty = document.createElement('div');
+    empty.className = 'picker-empty';
+    empty.textContent = 'No folders inside this location';
+    elements.push(empty);
+  }
+  document.querySelector('#picker-folders').replaceChildren(...elements);
+}
+
+function finishFolderPicker(path) {
+  const resolve = resolveFolderPicker;
+  resolveFolderPicker = null;
+  folderPicker.close();
+  resolve?.(path);
+}
+
 async function openSelected() {
   for (const entry of selectedEntries()) {
     if (entry.isDirectory) {
@@ -278,6 +346,15 @@ document.querySelector('#dialog-form').onsubmit = event => {
 };
 document.querySelector('#dialog-cancel').onclick = () => finishDialog(null);
 appDialog.oncancel = event => { event.preventDefault(); finishDialog(null); };
+document.querySelector('#picker-form').onsubmit = event => {
+  event.preventDefault();
+  finishFolderPicker(pickerSnapshot?.path ?? null);
+};
+document.querySelector('#picker-cancel').onclick = () => finishFolderPicker(null);
+document.querySelector('#picker-up').onclick = () => {
+  if (pickerSnapshot?.parent) loadPickerDirectory(pickerSnapshot.parent).catch(showError);
+};
+folderPicker.oncancel = event => { event.preventDefault(); finishFolderPicker(null); };
 entriesElement.onclick = event => {
   if (event.target === entriesElement) { clearSelection(); closeContextMenu(); render(); }
 };

@@ -14,6 +14,7 @@ public sealed class PlatformService : IPlatformService
 
         var startInfo = new ProcessStartInfo(command) { UseShellExecute = false };
         startInfo.ArgumentList.Add(fullPath);
+        SanitizeExternalApplicationEnvironment(startInfo);
         Process.Start(startInfo)?.Dispose();
     }
 
@@ -46,5 +47,20 @@ public sealed class PlatformService : IPlatformService
         using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start the system trash command.");
         await process.WaitForExitAsync(cancellationToken);
         if (process.ExitCode != 0) throw new IOException("The operating system could not move the item to trash.");
+    }
+
+    private static void SanitizeExternalApplicationEnvironment(ProcessStartInfo startInfo)
+    {
+        // These variables belong to ColorFinder's Nix/Photino host. Passing them to a
+        // user's editor, terminal, or browser can force the wrong display backend or ABI.
+        string[] hostOnlyVariables =
+        [
+            "GDK_BACKEND",
+            "GDK_PIXBUF_MODULE_FILE",
+            "GI_TYPELIB_PATH",
+            "LD_LIBRARY_PATH",
+            "PKG_CONFIG_PATH"
+        ];
+        foreach (var variable in hostOnlyVariables) startInfo.Environment.Remove(variable);
     }
 }

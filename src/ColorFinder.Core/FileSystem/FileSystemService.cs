@@ -52,21 +52,21 @@ public sealed class FileSystemService : IFileSystemService
             return destination;
         }, cancellationToken);
 
-    public Task<string> CopyAsync(string sourcePath, string destinationDirectory, CancellationToken cancellationToken = default) =>
+    public Task<string> CopyAsync(string sourcePath, string destinationDirectory, string? destinationName = null, CancellationToken cancellationToken = default) =>
         Task.Run(() =>
         {
             var source = RequireExistingItem(sourcePath);
-            var destination = DestinationPath(source, destinationDirectory);
+            var destination = DestinationPath(source, destinationDirectory, destinationName);
             if (Directory.Exists(source)) CopyDirectory(source, destination, cancellationToken);
             else File.Copy(source, destination);
             return destination;
         }, cancellationToken);
 
-    public Task<string> MoveAsync(string sourcePath, string destinationDirectory, CancellationToken cancellationToken = default) =>
+    public Task<string> MoveAsync(string sourcePath, string destinationDirectory, string? destinationName = null, CancellationToken cancellationToken = default) =>
         Task.Run(() =>
         {
             var source = RequireExistingItem(sourcePath);
-            var destination = DestinationPath(source, destinationDirectory);
+            var destination = DestinationPath(source, destinationDirectory, destinationName);
             if (Directory.Exists(source)) Directory.Move(source, destination);
             else File.Move(source, destination);
             return destination;
@@ -105,15 +105,16 @@ public sealed class FileSystemService : IFileSystemService
         }
     }
 
-    private string DestinationPath(string source, string destinationDirectory)
+    private string DestinationPath(string source, string destinationDirectory, string? destinationName)
     {
         var directory = Path.GetFullPath(destinationDirectory);
         if (!Directory.Exists(directory)) throw new DirectoryNotFoundException(directory);
         if (Directory.Exists(source) && directory.StartsWith(source + Path.DirectorySeparatorChar,
                 OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase))
             throw new IOException("A folder cannot be copied or moved inside itself.");
-        var destination = Path.Combine(directory, Path.GetFileName(source));
-        if (Exists(destination)) throw new IOException($"'{Path.GetFileName(source)}' already exists in the destination.");
+        var name = destinationName is null ? Path.GetFileName(source) : Path.GetFileName(CombineWithValidatedName(directory, destinationName));
+        var destination = Path.Combine(directory, name);
+        if (Exists(destination)) throw new DestinationExistsException(destination);
         return destination;
     }
 

@@ -62,6 +62,25 @@ public sealed class FileSystemServiceTests : IDisposable
         Assert.False(File.Exists(source));
     }
 
+    [Fact]
+    public async Task DestinationConflictCanBeRetriedWithANewName()
+    {
+        var sourceDirectory = Directory.CreateDirectory(Path.Combine(_root, "source")).FullName;
+        var destinationDirectory = Directory.CreateDirectory(Path.Combine(_root, "destination")).FullName;
+        var source = Path.Combine(sourceDirectory, "document.txt");
+        await File.WriteAllTextAsync(source, "new content");
+        await File.WriteAllTextAsync(Path.Combine(destinationDirectory, "document.txt"), "existing content");
+        var service = new FileSystemService();
+
+        var conflict = await Assert.ThrowsAsync<DestinationExistsException>(() =>
+            service.CopyAsync(source, destinationDirectory));
+        var copied = await service.CopyAsync(source, destinationDirectory, "renamed.txt");
+
+        Assert.Equal(Path.Combine(destinationDirectory, "document.txt"), conflict.DestinationPath);
+        Assert.Equal("new content", await File.ReadAllTextAsync(copied));
+        Assert.Equal("existing content", await File.ReadAllTextAsync(Path.Combine(destinationDirectory, "document.txt")));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);

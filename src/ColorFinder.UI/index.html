@@ -59,6 +59,12 @@
     .dialog-actions { display:flex; justify-content:flex-end; gap:8px; }
     .dialog-confirm { background:#376bd6; }
     .dialog-confirm.danger { background:#a93b38; color:white; }
+    .folder-picker { width:min(560px,calc(100vw - 32px)); }
+    .picker-toolbar { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+    .picker-path { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#b2b8c5; }
+    .picker-folders { height:280px; overflow:auto; padding:6px; border:1px solid #3a404d; border-radius:8px; background:#12151a; }
+    .picker-folder { display:flex; width:100%; gap:9px; text-align:left; background:transparent; }
+    .picker-empty { padding:18px; color:#9299a8; text-align:center; }
     .swatch { width:30px; height:30px; padding:0; border-radius:50%; background:var(--swatch); border:2px solid rgba(255,255,255,.18); }
     .swatch:hover { transform:scale(1.1); background:var(--swatch)!important; }
     #error { margin:12px; padding:12px; border-radius:8px; background:#5b2525; }
@@ -109,6 +115,21 @@
       <div class="dialog-actions">
         <button id="dialog-cancel" type="button">Cancel</button>
         <button id="dialog-confirm" class="dialog-confirm" type="submit">OK</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="folder-picker" class="app-dialog folder-picker">
+    <form id="picker-form" class="dialog-form">
+      <h2 id="picker-title">Choose Folder</h2>
+      <p>Select the folder where the chosen items should be placed.</p>
+      <div class="picker-toolbar">
+        <button id="picker-up" type="button" title="Parent folder">↑</button>
+        <span id="picker-path" class="picker-path"></span>
+      </div>
+      <div id="picker-folders" class="picker-folders"></div>
+      <div class="dialog-actions">
+        <button id="picker-cancel" type="button">Cancel</button>
+        <button id="picker-confirm" class="dialog-confirm" type="submit">Choose This Folder</button>
       </div>
     </form>
   </dialog>

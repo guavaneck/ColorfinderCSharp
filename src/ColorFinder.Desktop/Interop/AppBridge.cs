@@ -20,6 +20,12 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
             var result = await DispatchAsync(request);
             return JsonSerializer.Serialize(new BridgeResponse(request.Id, true, result), JsonOptions);
         }
+        catch (DestinationExistsException exception)
+        {
+            return JsonSerializer.Serialize(new BridgeResponse(request?.Id ?? string.Empty, false,
+                Error: exception.Message, Code: "destinationExists",
+                Details: new { exception.DestinationPath, Name = Path.GetFileName(exception.DestinationPath) }), JsonOptions);
+        }
         catch (Exception exception)
         {
             return JsonSerializer.Serialize(new BridgeResponse(request?.Id ?? string.Empty, false, Error: exception.Message), JsonOptions);
@@ -41,6 +47,7 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
         "filesystem.copy" => await CopyAsync(request),
         "filesystem.move" => await MoveAsync(request),
         "filesystem.trash" => await TrashAsync(request),
+        "filesystem.listDirectories" => await ListDirectoriesAsync(request),
         "color.assign" => await AssignColorAsync(request),
         "color.remove" => await RemoveColorAsync(request),
         "color.list" => ColorTag.BuiltIn,
@@ -104,7 +111,7 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
         var destinationDirectory = RequiredString(request, "destination");
         foreach (var source in RequiredPaths(request))
         {
-            var destination = await fileSystem.CopyAsync(source, destinationDirectory);
+            var destination = await fileSystem.CopyAsync(source, destinationDirectory, OptionalString(request, "name"));
             await colors.CopyMetadataAsync(source, destination);
         }
         return await DirectorySnapshotAsync(navigation.CurrentPath);
@@ -115,7 +122,7 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
         var destinationDirectory = RequiredString(request, "destination");
         foreach (var source in RequiredPaths(request))
         {
-            var destination = await fileSystem.MoveAsync(source, destinationDirectory);
+            var destination = await fileSystem.MoveAsync(source, destinationDirectory, OptionalString(request, "name"));
             await colors.MoveMetadataAsync(source, destination);
         }
         return await DirectorySnapshotAsync(navigation.CurrentPath);
@@ -129,6 +136,19 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
             await colors.RemoveMetadataAsync(path);
         }
         return await DirectorySnapshotAsync(navigation.CurrentPath);
+    }
+
+    private async Task<object> ListDirectoriesAsync(BridgeRequest request)
+    {
+        var path = Path.GetFullPath(RequiredString(request, "path"));
+        var entries = await fileSystem.ListDirectoryAsync(path);
+        return new
+        {
+            Path = path,
+            Parent = Directory.GetParent(path)?.FullName,
+            Directories = entries.Where(entry => entry.IsDirectory)
+                .Select(entry => new { entry.Name, entry.FullPath }).ToArray()
+        };
     }
 
     private static string RequiredString(BridgeRequest request, string name) =>
@@ -147,4 +167,8 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
 
         return [RequiredString(request, "path")];
     }
+
+    private static string? OptionalString(BridgeRequest request, string name) =>
+        request.Payload.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String &&
+        !string.IsNullOrWhiteSpace(property.GetString()) ? property.GetString() : null;
 }
