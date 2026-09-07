@@ -38,6 +38,22 @@ public sealed class JsonColorServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task BatchAssignmentAndRemovalArePersistedTogether()
+    {
+        var database = Path.Combine(_root, "colors.json");
+        var paths = new[] { Path.Combine(_root, "one.txt"), Path.Combine(_root, "two.txt") };
+        var service = new JsonColorService(database);
+
+        await service.AssignColorsAsync(paths, "green");
+        var assigned = await new JsonColorService(database).GetColorsAsync(paths);
+        Assert.Equal(2, assigned.Count);
+        Assert.All(assigned.Values, item => Assert.Equal("green", item.ColorId));
+
+        await service.RemoveColorsAsync(paths);
+        Assert.Empty(await new JsonColorService(database).GetColorsAsync(paths));
+    }
+
+    [Fact]
     public async Task RemoveDeletesAssignment()
     {
         var service = new JsonColorService(Path.Combine(_root, "colors.json"));

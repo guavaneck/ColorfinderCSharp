@@ -6,7 +6,8 @@ button:disabled { opacity:.35; cursor:default; }
 button:hover:not(:disabled), button.active { background:#343a48; }
 .toolbar { height:58px; display:flex; align-items:center; gap:16px; padding:10px 14px; background:var(--surface); border-bottom:1px solid #2b303a; }
 .toolbar nav { display:flex; gap:5px; }.toolbar nav button { font-size:22px; line-height:20px; min-width:36px; }
-.path { flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; background:#101217; border:1px solid #303541; border-radius:8px; padding:9px 12px; }
+.breadcrumbs { flex:1; min-width:80px; display:flex; align-items:center; overflow:auto hidden; white-space:nowrap; background:#101217; border:1px solid #303541; border-radius:8px; padding:3px 6px; scrollbar-width:none; }
+.breadcrumbs::-webkit-scrollbar { display:none; }.breadcrumb { flex:0 0 auto; padding:5px 7px; background:transparent; }.breadcrumb + .breadcrumb::before { content:'›'; color:#9299a8; margin-right:12px; pointer-events:none; }
 .view-toggle { display:flex; gap:3px; }
 main { height:calc(100vh - 58px); display:grid; grid-template-columns:190px 1fr; }
 aside { padding:20px 14px; background:#171a20; border-right:1px solid #292d36; }

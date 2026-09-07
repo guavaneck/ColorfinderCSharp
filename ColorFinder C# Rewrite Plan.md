@@ -25,7 +25,7 @@ Last reviewed: 2026-09-07
 - [x] C# owns filesystem access and navigation history; the UI owns transient selection and view mode.
 - [x] Linux development uses `shell.nix` with .NET 8, GTK, and WebKitGTK.
 - [x] The initial Core behavior has automated tests.
-- [ ] Complete Version 0.1; breadcrumbs, opening files, and multi-selection remain.
+- [x] Complete Version 0.1 functionality on Linux.
 - [ ] Verify and package the application on macOS.
 
 Checked items below represent implemented and verified behavior, not merely planned behavior.
@@ -1279,12 +1279,12 @@ ColorFinder should support:
 - [x] Navigate back
 - [x] Navigate forward
 - [x] Navigate up
-- [ ] Breadcrumb navigation
+- [x] Breadcrumb navigation
 - [x] Grid view
 - [x] List view
-- [ ] Open files with the operating system
+- [x] Open files with the operating system
 - [x] Single-item selection
-- [ ] Multi-item selection
+- [x] Multi-item selection
 
 ### Early Color Experiment
 
@@ -1318,7 +1318,7 @@ Add:
 
 Add:
 
-- [ ] Multi-selection color assignment
+- [x] Multi-selection color assignment
 - [ ] Preserve color during rename
 - [ ] Preserve color during move
 - [ ] Copy color during duplication

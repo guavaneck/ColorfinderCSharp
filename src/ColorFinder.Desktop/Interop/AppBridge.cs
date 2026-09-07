@@ -2,10 +2,11 @@ using System.Text.Json;
 using ColorFinder.Core.Colors;
 using ColorFinder.Core.FileSystem;
 using ColorFinder.Core.Navigation;
+using ColorFinder.Desktop.Platform;
 
 namespace ColorFinder.Desktop.Interop;
 
-public sealed class AppBridge(IFileSystemService fileSystem, IColorService colors, NavigationService navigation)
+public sealed class AppBridge(IFileSystemService fileSystem, IColorService colors, NavigationService navigation, IPlatformService platform)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -33,6 +34,7 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
         "navigation.back" => await DirectorySnapshotAsync(navigation.Back()),
         "navigation.forward" => await DirectorySnapshotAsync(navigation.Forward()),
         "navigation.up" => await DirectorySnapshotAsync(navigation.Up()),
+        "filesystem.open" => OpenFile(request),
         "color.assign" => await AssignColorAsync(request),
         "color.remove" => await RemoveColorAsync(request),
         "color.list" => ColorTag.BuiltIn,
@@ -53,18 +55,36 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
 
     private async Task<object> AssignColorAsync(BridgeRequest request)
     {
-        await colors.AssignColorAsync(RequiredString(request, "path"), RequiredString(request, "color"));
+        await colors.AssignColorsAsync(RequiredPaths(request), RequiredString(request, "color"));
         return await DirectorySnapshotAsync(navigation.CurrentPath);
     }
 
     private async Task<object> RemoveColorAsync(BridgeRequest request)
     {
-        await colors.RemoveColorAsync(RequiredString(request, "path"));
+        await colors.RemoveColorsAsync(RequiredPaths(request));
         return await DirectorySnapshotAsync(navigation.CurrentPath);
+    }
+
+    private object OpenFile(BridgeRequest request)
+    {
+        platform.Open(RequiredString(request, "path"));
+        return new { opened = true };
     }
 
     private static string RequiredString(BridgeRequest request, string name) =>
         request.Payload.TryGetProperty(name, out var property) && !string.IsNullOrWhiteSpace(property.GetString())
             ? property.GetString()!
             : throw new ArgumentException($"Payload property '{name}' is required.");
+
+    private static string[] RequiredPaths(BridgeRequest request)
+    {
+        if (request.Payload.TryGetProperty("paths", out var paths) && paths.ValueKind == JsonValueKind.Array)
+        {
+            var values = paths.EnumerateArray().Select(item => item.GetString())
+                .Where(item => !string.IsNullOrWhiteSpace(item)).Cast<string>().ToArray();
+            if (values.Length > 0) return values;
+        }
+
+        return [RequiredString(request, "path")];
+    }
 }

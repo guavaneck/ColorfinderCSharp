@@ -24,16 +24,31 @@ public sealed class JsonColorService : IColorService
     }
 
     public async Task AssignColorAsync(string path, string colorId, CancellationToken cancellationToken = default)
+        => await AssignColorsAsync([path], colorId, cancellationToken);
+
+    public async Task AssignColorsAsync(IEnumerable<string> paths, string colorId, CancellationToken cancellationToken = default)
     {
         var color = ColorTag.BuiltIn.FirstOrDefault(item => item.Id.Equals(colorId, StringComparison.OrdinalIgnoreCase))
             ?? throw new ArgumentException($"Unknown color '{colorId}'.", nameof(colorId));
-        var normalizedPath = NormalizePath(path);
+        var normalizedPaths = NormalizeDistinctPaths(paths);
 
-        await MutateAsync(data => data[normalizedPath] = new(normalizedPath, color.Id), cancellationToken);
+        await MutateAsync(data =>
+        {
+            foreach (var path in normalizedPaths) data[path] = new(path, color.Id);
+        }, cancellationToken);
     }
 
     public Task RemoveColorAsync(string path, CancellationToken cancellationToken = default) =>
-        MutateAsync(data => data.Remove(NormalizePath(path)), cancellationToken);
+        RemoveColorsAsync([path], cancellationToken);
+
+    public Task RemoveColorsAsync(IEnumerable<string> paths, CancellationToken cancellationToken = default)
+    {
+        var normalizedPaths = NormalizeDistinctPaths(paths);
+        return MutateAsync(data =>
+        {
+            foreach (var path in normalizedPaths) data.Remove(path);
+        }, cancellationToken);
+    }
 
     public async Task<ColorMetadata?> GetColorAsync(string path, CancellationToken cancellationToken = default)
     {
@@ -97,4 +112,10 @@ public sealed class JsonColorService : IColorService
 
     private static StringComparer PathComparer => OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
     private static string NormalizePath(string path) => Path.GetFullPath(path);
+    private static string[] NormalizeDistinctPaths(IEnumerable<string> paths)
+    {
+        var normalized = paths.Select(NormalizePath).Distinct(PathComparer).ToArray();
+        if (normalized.Length == 0) throw new ArgumentException("At least one path is required.", nameof(paths));
+        return normalized;
+    }
 }

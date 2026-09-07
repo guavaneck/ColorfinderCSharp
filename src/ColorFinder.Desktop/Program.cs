@@ -3,10 +3,11 @@ using ColorFinder.Core.Colors;
 using ColorFinder.Core.FileSystem;
 using ColorFinder.Core.Navigation;
 using ColorFinder.Desktop.Interop;
+using ColorFinder.Desktop.Platform;
 using Photino.NET;
 
 var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-var bridge = new AppBridge(new FileSystemService(), JsonColorService.CreateDefault(), new NavigationService(home));
+var bridge = new AppBridge(new FileSystemService(), JsonColorService.CreateDefault(), new NavigationService(home), new PlatformService());
 var indexPath = Path.Combine(AppContext.BaseDirectory, "ui", "index.html");
 
 if (!File.Exists(indexPath))
