@@ -86,6 +86,12 @@ public sealed class JsonColorService : IColorService
         finally { _gate.Release(); }
     }
 
+    public Task MoveMetadataAsync(string oldPath, string newPath, CancellationToken cancellationToken = default) =>
+        TransferMetadataAsync(oldPath, newPath, removeSource: true, cancellationToken);
+
+    public Task CopyMetadataAsync(string sourcePath, string destinationPath, CancellationToken cancellationToken = default) =>
+        TransferMetadataAsync(sourcePath, destinationPath, removeSource: false, cancellationToken);
+
     private async Task MutateAsync(Action<Dictionary<string, ColorMetadata>> mutation, CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken);
@@ -102,6 +108,23 @@ public sealed class JsonColorService : IColorService
         finally { _gate.Release(); }
     }
 
+    private Task TransferMetadataAsync(string sourcePath, string destinationPath, bool removeSource, CancellationToken cancellationToken)
+    {
+        var source = NormalizePath(sourcePath);
+        var destination = NormalizePath(destinationPath);
+        var prefix = source.EndsWith(Path.DirectorySeparatorChar) ? source : source + Path.DirectorySeparatorChar;
+        return MutateAsync(data =>
+        {
+            var matches = data.Where(item => PathsEqual(item.Key, source) || item.Key.StartsWith(prefix, PathComparison)).ToArray();
+            foreach (var (oldKey, metadata) in matches)
+            {
+                var newKey = destination + oldKey[source.Length..];
+                data[newKey] = metadata with { Path = newKey };
+                if (removeSource) data.Remove(oldKey);
+            }
+        }, cancellationToken);
+    }
+
     private async Task<Dictionary<string, ColorMetadata>> ReadAsync(CancellationToken cancellationToken)
     {
         if (!File.Exists(_databasePath)) return new Dictionary<string, ColorMetadata>(PathComparer);
@@ -111,6 +134,8 @@ public sealed class JsonColorService : IColorService
     }
 
     private static StringComparer PathComparer => OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+    private static StringComparison PathComparison => OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+    private static bool PathsEqual(string left, string right) => string.Equals(left, right, PathComparison);
     private static string NormalizePath(string path) => Path.GetFullPath(path);
     private static string[] NormalizeDistinctPaths(IEnumerable<string> paths)
     {

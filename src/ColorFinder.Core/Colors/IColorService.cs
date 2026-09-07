@@ -9,4 +9,6 @@ public interface IColorService
     Task<ColorMetadata?> GetColorAsync(string path, CancellationToken cancellationToken = default);
     Task<IReadOnlyDictionary<string, ColorMetadata>> GetColorsAsync(IEnumerable<string> paths, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ColorMetadata>> GetFilesByColorAsync(string colorId, CancellationToken cancellationToken = default);
+    Task MoveMetadataAsync(string oldPath, string newPath, CancellationToken cancellationToken = default);
+    Task CopyMetadataAsync(string sourcePath, string destinationPath, CancellationToken cancellationToken = default);
 }

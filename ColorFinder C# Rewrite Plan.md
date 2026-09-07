@@ -1305,13 +1305,13 @@ The point is validating the central ColorFinder concept immediately.
 
 Add:
 
-- [ ] Rename
-- [ ] Create folder
+- [x] Rename
+- [x] Create folder
 - [ ] Copy
 - [ ] Move
-- [ ] Duplicate
+- [x] Duplicate
 - [ ] Delete
-- [ ] Context menus
+- [x] Context menus
 - [ ] Keyboard shortcuts
 
 ### Color Improvements
@@ -1319,9 +1319,9 @@ Add:
 Add:
 
 - [x] Multi-selection color assignment
-- [ ] Preserve color during rename
+- [x] Preserve color during rename
 - [ ] Preserve color during move
-- [ ] Copy color during duplication
+- [x] Copy color during duplication
 
 Begin establishing the final color workflow.
 

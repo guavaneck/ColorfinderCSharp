@@ -35,6 +35,9 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
         "navigation.forward" => await DirectorySnapshotAsync(navigation.Forward()),
         "navigation.up" => await DirectorySnapshotAsync(navigation.Up()),
         "filesystem.open" => OpenFile(request),
+        "filesystem.createDirectory" => await CreateDirectoryAsync(request),
+        "filesystem.rename" => await RenameAsync(request),
+        "filesystem.duplicate" => await DuplicateAsync(request),
         "color.assign" => await AssignColorAsync(request),
         "color.remove" => await RemoveColorAsync(request),
         "color.list" => ColorTag.BuiltIn,
@@ -69,6 +72,28 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
     {
         platform.Open(RequiredString(request, "path"));
         return new { opened = true };
+    }
+
+    private async Task<object> CreateDirectoryAsync(BridgeRequest request)
+    {
+        await fileSystem.CreateDirectoryAsync(navigation.CurrentPath, RequiredString(request, "name"));
+        return await DirectorySnapshotAsync(navigation.CurrentPath);
+    }
+
+    private async Task<object> RenameAsync(BridgeRequest request)
+    {
+        var source = RequiredString(request, "path");
+        var destination = await fileSystem.RenameAsync(source, RequiredString(request, "name"));
+        await colors.MoveMetadataAsync(source, destination);
+        return await DirectorySnapshotAsync(navigation.CurrentPath);
+    }
+
+    private async Task<object> DuplicateAsync(BridgeRequest request)
+    {
+        var source = RequiredString(request, "path");
+        var destination = await fileSystem.DuplicateAsync(source);
+        await colors.CopyMetadataAsync(source, destination);
+        return await DirectorySnapshotAsync(navigation.CurrentPath);
     }
 
     private static string RequiredString(BridgeRequest request, string name) =>

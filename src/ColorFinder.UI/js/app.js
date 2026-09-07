@@ -1,5 +1,6 @@
 const state = { snapshot: null, selectedPaths: new Set(), anchorIndex: -1, home: null, view: 'grid', pending: new Map() };
 const entriesElement = document.querySelector('#entries');
+const contextMenu = document.querySelector('#context-menu');
 
 function receiveBridgeMessage(message) {
   let response;
@@ -22,6 +23,7 @@ function invoke(action, payload = {}) {
 
 async function refresh(action, payload) {
   try {
+    closeContextMenu();
     document.querySelector('#error').hidden = true;
     state.snapshot = await invoke(action, payload);
     state.home ??= state.snapshot.path;
@@ -51,14 +53,22 @@ function render() {
     tag.style.setProperty('--tag', assignedColor?.hexColor ?? 'transparent');
     tag.title = assignedColor ? `${assignedColor.name} tag` : '';
     button.onclick = event => selectEntry(event, entry, index);
+    button.oncontextmenu = event => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!state.selectedPaths.has(entry.fullPath)) {
+        state.selectedPaths.clear();
+        state.selectedPaths.add(entry.fullPath);
+        state.anchorIndex = index;
+        render();
+      }
+      showContextMenu(event.clientX, event.clientY, false);
+    };
     button.ondblclick = () => entry.isDirectory
       ? refresh('navigation.open', { path: entry.fullPath })
       : invoke('filesystem.open', { path: entry.fullPath }).catch(showError);
     return button;
   }));
-  const bar = document.querySelector('#color-bar');
-  bar.hidden = state.selectedPaths.size === 0;
-  document.querySelector('#selection-label').textContent = selectionLabel();
   const colorButtons = colors.map(color => {
     const button = document.createElement('button');
     button.className = 'swatch'; button.title = color.name;
@@ -66,7 +76,7 @@ function render() {
     button.onclick = () => refresh('color.assign', { paths: [...state.selectedPaths], color: color.id });
     return button;
   });
-  document.querySelector('#colors').replaceChildren(...colorButtons);
+  document.querySelector('#context-colors').replaceChildren(...colorButtons);
 }
 
 function renderBreadcrumbs(path) {
@@ -117,16 +127,65 @@ function clearSelection() {
   state.anchorIndex = -1;
 }
 
-function selectionLabel() {
-  if (state.selectedPaths.size === 0) return 'No selection';
-  if (state.selectedPaths.size > 1) return `${state.selectedPaths.size} items selected`;
-  return state.snapshot.entries.find(entry => state.selectedPaths.has(entry.fullPath))?.name ?? '1 item selected';
+function showContextMenu(x, y, emptySpace) {
+  const count = state.selectedPaths.size;
+  document.querySelector('#context-open').hidden = emptySpace;
+  document.querySelector('#context-rename').hidden = emptySpace;
+  document.querySelector('#context-duplicate').hidden = emptySpace;
+  document.querySelector('#context-item-options').hidden = emptySpace;
+  document.querySelector('#context-new-folder').hidden = !emptySpace;
+  document.querySelector('#context-open').disabled = count !== 1;
+  document.querySelector('#context-rename').disabled = count !== 1;
+  document.querySelector('#context-duplicate').disabled = count !== 1;
+  contextMenu.hidden = false;
+  const bounds = contextMenu.getBoundingClientRect();
+  contextMenu.style.left = `${Math.max(6, Math.min(x, window.innerWidth - bounds.width - 6))}px`;
+  contextMenu.style.top = `${Math.max(6, Math.min(y, window.innerHeight - bounds.height - 6))}px`;
+  contextMenu.querySelector('button:not([hidden]):not(:disabled)')?.focus();
+}
+
+function closeContextMenu() {
+  contextMenu.hidden = true;
 }
 
 function showError(error) {
   const alert = document.querySelector('#error');
   alert.textContent = error.message;
   alert.hidden = false;
+}
+
+function selectedEntries() {
+  return state.snapshot.entries.filter(entry => state.selectedPaths.has(entry.fullPath));
+}
+
+async function createFolder() {
+  const name = prompt('New folder name');
+  if (name?.trim()) await refresh('filesystem.createDirectory', { name });
+}
+
+async function renameSelected() {
+  const selected = selectedEntries();
+  if (selected.length !== 1) return;
+  const name = prompt('Rename item', selected[0].name);
+  if (name?.trim() && name !== selected[0].name)
+    await refresh('filesystem.rename', { path: selected[0].fullPath, name });
+}
+
+async function duplicateSelected() {
+  const selected = selectedEntries();
+  if (selected.length !== 1) return;
+  await refresh('filesystem.duplicate', { path: selected[0].fullPath });
+}
+
+async function openSelected() {
+  for (const entry of selectedEntries()) {
+    if (entry.isDirectory) {
+      if (state.selectedPaths.size === 1) await refresh('navigation.open', { path: entry.fullPath });
+    } else {
+      await invoke('filesystem.open', { path: entry.fullPath });
+    }
+  }
+  closeContextMenu();
 }
 
 function formatSize(bytes) {
@@ -141,10 +200,24 @@ document.querySelector('#back').onclick = () => refresh('navigation.back');
 document.querySelector('#forward').onclick = () => refresh('navigation.forward');
 document.querySelector('#up').onclick = () => refresh('navigation.up');
 document.querySelector('#home-link').onclick = () => refresh('navigation.open', { path: state.home });
-document.querySelector('#clear-color').onclick = () => refresh('color.remove', { paths: [...state.selectedPaths] });
+document.querySelector('#context-open').onclick = () => openSelected().catch(showError);
+document.querySelector('#context-clear').onclick = () => refresh('color.remove', { paths: [...state.selectedPaths] });
+document.querySelector('#context-rename').onclick = () => renameSelected().catch(showError);
+document.querySelector('#context-duplicate').onclick = () => duplicateSelected().catch(showError);
+document.querySelector('#context-new-folder').onclick = () => createFolder().catch(showError);
 entriesElement.onclick = event => {
-  if (event.target === entriesElement) { clearSelection(); render(); }
+  if (event.target === entriesElement) { clearSelection(); closeContextMenu(); render(); }
 };
+entriesElement.oncontextmenu = event => {
+  if (event.target !== entriesElement) return;
+  event.preventDefault();
+  clearSelection();
+  render();
+  showContextMenu(event.clientX, event.clientY, true);
+};
+document.addEventListener('pointerdown', event => {
+  if (!contextMenu.hidden && !contextMenu.contains(event.target)) closeContextMenu();
+});
 document.addEventListener('keydown', event => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
     event.preventDefault();
@@ -152,8 +225,13 @@ document.addEventListener('keydown', event => {
     state.anchorIndex = state.snapshot.entries.length ? 0 : -1;
     render();
   } else if (event.key === 'Escape') {
-    clearSelection();
-    render();
+    if (!contextMenu.hidden) closeContextMenu();
+    else { clearSelection(); render(); }
+  } else if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+    event.preventDefault();
+    const selected = entriesElement.querySelector('.entry.selected');
+    const bounds = selected?.getBoundingClientRect() ?? entriesElement.getBoundingClientRect();
+    showContextMenu(bounds.left + 16, bounds.top + 16, !selected);
   }
 });
 for (const view of ['grid', 'list']) document.querySelector(`#${view}-view`).onclick = () => {

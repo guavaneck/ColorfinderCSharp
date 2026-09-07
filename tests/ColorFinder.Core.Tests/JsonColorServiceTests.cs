@@ -54,6 +54,25 @@ public sealed class JsonColorServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task MoveAndCopyTransferFolderMetadataRecursively()
+    {
+        var database = Path.Combine(_root, "colors.json");
+        var source = Path.Combine(_root, "source");
+        var child = Path.Combine(source, "child.txt");
+        var moved = Path.Combine(_root, "moved");
+        var copied = Path.Combine(_root, "copied");
+        var service = new JsonColorService(database);
+        await service.AssignColorsAsync([source, child], "blue");
+
+        await service.MoveMetadataAsync(source, moved);
+        await service.CopyMetadataAsync(moved, copied);
+
+        Assert.Null(await service.GetColorAsync(source));
+        Assert.Equal("blue", (await service.GetColorAsync(Path.Combine(moved, "child.txt")))?.ColorId);
+        Assert.Equal("blue", (await service.GetColorAsync(Path.Combine(copied, "child.txt")))?.ColorId);
+    }
+
+    [Fact]
     public async Task RemoveDeletesAssignment()
     {
         var service = new JsonColorService(Path.Combine(_root, "colors.json"));

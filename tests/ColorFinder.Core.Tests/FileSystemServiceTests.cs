@@ -20,6 +20,30 @@ public sealed class FileSystemServiceTests : IDisposable
             item => Assert.Equal("visible.txt", item.Name));
     }
 
+    [Fact]
+    public async Task CreatesRenamesAndDuplicatesItems()
+    {
+        Directory.CreateDirectory(_root);
+        var service = new FileSystemService();
+        var created = await service.CreateDirectoryAsync(_root, "Original");
+        await File.WriteAllTextAsync(Path.Combine(created, "content.txt"), "hello");
+
+        var renamed = await service.RenameAsync(created, "Renamed");
+        var duplicate = await service.DuplicateAsync(renamed);
+
+        Assert.Equal(Path.Combine(_root, "Renamed"), renamed);
+        Assert.Equal(Path.Combine(_root, "Renamed copy"), duplicate);
+        Assert.Equal("hello", await File.ReadAllTextAsync(Path.Combine(duplicate, "content.txt")));
+    }
+
+    [Fact]
+    public async Task RejectsNamesContainingPathSeparators()
+    {
+        Directory.CreateDirectory(_root);
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            new FileSystemService().CreateDirectoryAsync(_root, "nested/folder"));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);
