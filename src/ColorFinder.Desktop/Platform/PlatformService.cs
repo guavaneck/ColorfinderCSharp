@@ -6,6 +6,7 @@ namespace ColorFinder.Desktop.Platform;
 public sealed class PlatformService : IPlatformService
 {
     private static readonly Dictionary<string, DesktopHandler> HandlerCache = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, string> ContentTypeCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly object HandlerCacheLock = new();
 
     public void Open(string path)
@@ -21,30 +22,22 @@ public sealed class PlatformService : IPlatformService
             startInfo.ArgumentList.Add(fullPath);
         }
         else throw new PlatformNotSupportedException("ColorFinder currently supports Linux and macOS.");
-        SanitizeExternalApplicationEnvironment(startInfo);
-        Process.Start(startInfo)?.Dispose();
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                SanitizeExternalApplicationEnvironment(startInfo);
+                Process.Start(startInfo)?.Dispose();
+            }
+            catch (Exception exception) { Console.Error.WriteLine($"Could not open '{fullPath}': {exception.Message}"); }
+        });
     }
 
     private static ProcessStartInfo CreateLinuxOpenStartInfo(string path)
     {
-        var infoOutput = RunAndCapture("gio", "info", "-a", "standard::content-type", path);
-        var contentType = infoOutput.Split('\n').Select(line => line.Trim())
-            .FirstOrDefault(line => line.StartsWith("standard::content-type:"))?[23..].Trim();
-        if (string.IsNullOrWhiteSpace(contentType)) throw new InvalidOperationException("Could not determine the file type.");
+        var handler = ResolveHandler(path);
 
-        DesktopHandler handler;
-        lock (HandlerCacheLock)
-        {
-            if (!HandlerCache.TryGetValue(contentType, out handler!))
-            {
-                var mimeOutput = RunAndCapture("gio", "mime", contentType);
-                var desktopName = Regex.Match(mimeOutput, "Default application[^:]*:\\s*(?<name>\\S+)").Groups["name"].Value;
-                handler = ReadDesktopHandler(desktopName);
-                HandlerCache[contentType] = handler;
-            }
-        }
-
-        var command = ParseDesktopExec(handler.Exec, path);
+        var command = DesktopExecParser.Parse(handler.Exec, path);
         if (command.Count == 0) throw new InvalidOperationException("The default application has no launch command.");
         ProcessStartInfo startInfo;
         if (handler.RequiresTerminal)
@@ -52,10 +45,55 @@ public sealed class PlatformService : IPlatformService
             var terminal = ResolveTerminal();
             startInfo = new ProcessStartInfo(terminal.Command) { UseShellExecute = false };
             foreach (var argument in terminal.Arguments) startInfo.ArgumentList.Add(argument);
+            foreach (var argument in command) startInfo.ArgumentList.Add(argument);
         }
-        else startInfo = new ProcessStartInfo(command[0]) { UseShellExecute = false };
-        foreach (var argument in command.Skip(1)) startInfo.ArgumentList.Add(argument);
+        else
+        {
+            startInfo = new ProcessStartInfo(command[0]) { UseShellExecute = false };
+            foreach (var argument in command.Skip(1)) startInfo.ArgumentList.Add(argument);
+        }
         return startInfo;
+    }
+
+    public Task WarmOpenHandlersAsync(IEnumerable<string> paths, CancellationToken cancellationToken = default)
+    {
+        if (!OperatingSystem.IsLinux()) return Task.CompletedTask;
+        var representatives = paths.Where(File.Exists)
+            .GroupBy(path => Path.GetExtension(path), StringComparer.OrdinalIgnoreCase).Select(group => group.First()).ToArray();
+        return Task.Run(() =>
+        {
+            foreach (var path in representatives)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                try { ResolveHandler(path); }
+                catch { /* Opening will report the detailed error if the user selects this file. */ }
+            }
+        }, cancellationToken);
+    }
+
+    private static DesktopHandler ResolveHandler(string path)
+    {
+        var extension = Path.GetExtension(path);
+        string? contentType;
+        lock (HandlerCacheLock) ContentTypeCache.TryGetValue(extension, out contentType);
+        if (contentType is null)
+        {
+            var infoOutput = RunAndCapture("gio", "info", "-a", "standard::content-type", path);
+            contentType = infoOutput.Split('\n').Select(line => line.Trim())
+                .FirstOrDefault(line => line.StartsWith("standard::content-type:"))?[23..].Trim();
+            if (string.IsNullOrWhiteSpace(contentType)) throw new InvalidOperationException("Could not determine the file type.");
+            lock (HandlerCacheLock) ContentTypeCache[extension] = contentType;
+        }
+
+        lock (HandlerCacheLock)
+        {
+            if (HandlerCache.TryGetValue(contentType, out var cached)) return cached;
+        }
+        var mimeOutput = RunAndCapture("gio", "mime", contentType);
+        var desktopName = Regex.Match(mimeOutput, "Default application[^:]*:\\s*(?<name>\\S+)").Groups["name"].Value;
+        var handler = ReadDesktopHandler(desktopName);
+        lock (HandlerCacheLock) HandlerCache[contentType] = handler;
+        return handler;
     }
 
     private static DesktopHandler ReadDesktopHandler(string desktopName)
@@ -72,39 +110,40 @@ public sealed class PlatformService : IPlatformService
         return new DesktopHandler(exec, lines.Any(line => line.Equals("Terminal=true", StringComparison.OrdinalIgnoreCase)));
     }
 
-    private static List<string> ParseDesktopExec(string exec, string path)
-    {
-        var values = Regex.Matches(exec, "(?:\\\"(?<value>[^\\\"]*)\\\"|(?<value>\\S+))")
-            .Select(match => match.Groups["value"].Value).ToList();
-        var inserted = false;
-        for (var index = values.Count - 1; index >= 0; index--)
-        {
-            if (values[index].StartsWith('%') && values[index].Length == 2)
-            {
-                if ("fFuU".Contains(values[index][1])) { values[index] = path; inserted = true; }
-                else values.RemoveAt(index);
-            }
-        }
-        if (!inserted) values.Add(path);
-        return values;
-    }
-
     private static (string Command, string[] Arguments) ResolveTerminal()
     {
+        var configured = Environment.GetEnvironmentVariable("COLORFINDER_TERMINAL");
+        if (!string.IsNullOrWhiteSpace(configured) && FindOnPath(configured) is { } configuredTerminal)
+            return (configuredTerminal, []);
+        if (FindOnPath("xdg-terminal-exec") is { } desktopTerminal)
+            return (desktopTerminal, ["--"]);
+        if (FindOnPath("x-terminal-emulator") is { } systemTerminal)
+            return (systemTerminal, ["-e"]);
+        // When ColorFinder was launched from a terminal, TERM identifies that
+        // terminal's protocol. Use it as a preference only; Kitty is optional.
         var term = Environment.GetEnvironmentVariable("TERM") ?? string.Empty;
         if (term.Contains("kitty", StringComparison.OrdinalIgnoreCase) && FindOnPath("kitty") is { } kitty)
             return (kitty, ["--detach"]);
-        if (FindOnPath("footclient") is { } footClient) return (footClient, []);
         if (FindOnPath("foot") is { } foot) return (foot, []);
-        throw new InvalidOperationException("No supported terminal launcher was found.");
+        if (FindOnPath("footclient") is { } footClient) return (footClient, []);
+        if (FindOnPath("alacritty") is { } alacritty) return (alacritty, ["-e"]);
+        if (FindOnPath("wezterm") is { } wezterm) return (wezterm, ["start", "--"]);
+        if (FindOnPath("kitty") is { } fallbackKitty) return (fallbackKitty, ["--detach"]);
+        throw new InvalidOperationException("The selected application requires a terminal, but no terminal launcher was found. Set COLORFINDER_TERMINAL to one.");
     }
 
     private static string RunAndCapture(string command, params string[] arguments)
     {
-        var info = new ProcessStartInfo(command) { UseShellExecute = false, RedirectStandardOutput = true };
+        var info = new ProcessStartInfo(command)
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
         foreach (var argument in arguments) info.ArgumentList.Add(argument);
         using var process = Process.Start(info) ?? throw new InvalidOperationException($"Could not start '{command}'.");
         var output = process.StandardOutput.ReadToEnd();
+        _ = process.StandardError.ReadToEnd();
         process.WaitForExit();
         if (process.ExitCode != 0) throw new InvalidOperationException($"'{command}' exited with code {process.ExitCode}.");
         return output;

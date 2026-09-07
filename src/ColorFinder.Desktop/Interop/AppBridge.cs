@@ -57,6 +57,7 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
     private async Task<object> DirectorySnapshotAsync(string path)
     {
         var entries = await fileSystem.ListDirectoryAsync(path);
+        _ = platform.WarmOpenHandlersAsync(entries.Where(entry => !entry.IsDirectory).Select(entry => entry.FullPath));
         var assignments = await colors.GetColorsAsync(entries.Select(entry => entry.FullPath));
         var rendered = entries.Select(entry => new
         {
