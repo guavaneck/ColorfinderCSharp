@@ -53,7 +53,6 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
         "color.remove" => await RemoveColorAsync(request),
         "color.list" => await colors.GetColorTagsAsync(),
         "color.rename" => await RenameColorAsync(request),
-        "color.search" => await SearchColorsAsync(request),
         "rules.list" => await rules.GetRulesAsync(),
         "rules.save" => await SaveRuleAsync(request),
         "rules.delete" => await DeleteRuleAsync(request),
@@ -93,21 +92,6 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
     {
         await colors.RenameColorAsync(RequiredString(request, "color"), RequiredString(request, "name"));
         return await DirectorySnapshotAsync(navigation.CurrentPath);
-    }
-
-    private async Task<object> SearchColorsAsync(BridgeRequest request)
-    {
-        var colorId = RequiredString(request, "color");
-        var query = OptionalString(request, "query") ?? string.Empty;
-        var tags = await colors.GetFilesByColorAsync(colorId);
-        var entries = tags.Where(item => fileSystem.Exists(item.Path) && Path.GetFileName(item.Path).Contains(query, StringComparison.CurrentCultureIgnoreCase))
-            .Select(item =>
-            {
-                var isDirectory = Directory.Exists(item.Path);
-                var info = isDirectory ? (FileSystemInfo)new DirectoryInfo(item.Path) : new FileInfo(item.Path);
-                return new { Name = info.Name, FullPath = info.FullName, Extension = isDirectory ? "" : Path.GetExtension(info.Name), Size = isDirectory ? (long?)null : ((FileInfo)info).Length, ModifiedDate = new DateTimeOffset(info.LastWriteTime), IsDirectory = isDirectory, ColorId = item.ColorId };
-            }).ToArray();
-        return new { Path = $"Search: {colorId}", navigation.CanGoBack, navigation.CanGoForward, Entries = entries, Colors = await colors.GetColorTagsAsync(), IsSearch = true };
     }
 
     private async Task<object> AssignColorAsync(BridgeRequest request)

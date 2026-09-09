@@ -1391,25 +1391,15 @@ Test rule precedence carefully.
 
 Expand search.
 
+Keep search integrated into the main toolbar rather than adding a separate advanced-search interface.
+
 Support:
 
-```text
-Filename
-Color
-Extension
-Directory
-Recursive search
-```
+- [x] Filename matching in the current folder
+- [x] Color matching with inline syntax such as `<orange>`
+- [x] Combined color and filename queries such as `<orange> Downloads`
 
-Allow combinations:
-
-```text
-Blue + .cs
-
-Red + PDF
-
-Green + Images
-```
+Extension, arbitrary-directory, and recursive search can be reconsidered later if the integrated search needs them.
 
 Begin evaluating whether the simple metadata storage system is still sufficient.
 

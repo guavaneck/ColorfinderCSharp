@@ -30,7 +30,6 @@
     .color-dot { width:12px; height:12px; flex:none; border-radius:50%; background:var(--swatch); }
     .color-filter.active { background:#343a48; }
     .color-actions { display:flex; gap:5px; margin:8px 0; }.color-actions button { flex:1; padding:6px; font-size:12px; }
-    .hint { margin:28px 9px; color:#9299a8; color:var(--muted); font-size:12px; line-height:1.5; }
     .browser { position:relative; min-width:0; min-height:0; overflow:hidden; }
     .entries { height:100%; overflow:auto; padding:20px; align-content:start; }
     .entries.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(126px,1fr)); gap:12px; }
@@ -89,7 +88,7 @@
       <button id="back" title="Back">‹</button><button id="forward" title="Forward">›</button><button id="up" title="Up">↑</button>
     </nav>
     <nav id="path" class="breadcrumbs" aria-label="Current path">Loading…</nav>
-    <input id="search" class="search-box" type="search" placeholder="Filter by name" aria-label="Filter by file name">
+    <input id="search" class="search-box" type="search" placeholder="Search" aria-label="Search files" title="Use &lt;color&gt; name to search by color and name, for example: &lt;orange&gt; Downloads">
     <div class="view-toggle"><button id="grid-view" class="active">Grid</button><button id="list-view">List</button></div>
   </header>
   <main>
@@ -98,8 +97,7 @@
       <button id="home-link" class="sidebar-link">⌂ Home</button>
       <h2 style="margin-top:24px">Colors</h2>
       <div id="color-filters" class="color-filters"></div>
-      <div class="color-actions"><button id="search-colors" title="Search tagged items everywhere">Search</button><button id="color-settings">Settings</button></div>
-      <div class="hint">Double-click to open. Right-click an item for file and color actions.</div>
+      <div class="color-actions"><button id="color-settings">Settings</button></div>
     </aside>
     <section class="browser">
       <div id="error" role="alert" hidden></div>

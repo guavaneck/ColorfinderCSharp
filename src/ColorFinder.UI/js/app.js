@@ -59,7 +59,9 @@ function render() {
   document.querySelector('#back').disabled = !canGoBack;
   document.querySelector('#forward').disabled = !canGoForward;
   entriesElement.className = `entries ${state.view}`;
-  const visibleEntries = entries.filter(entry => (!state.colorFilter || entry.colorId === state.colorFilter) && (!state.query || entry.name.toLocaleLowerCase().includes(state.query.toLocaleLowerCase())));
+  const search = parseSearch(state.query, colors);
+  const activeColor = search.colorId ?? state.colorFilter;
+  const visibleEntries = entries.filter(entry => (!activeColor || entry.colorId === activeColor) && (!search.name || entry.name.toLocaleLowerCase().includes(search.name.toLocaleLowerCase())));
   entriesElement.replaceChildren(...visibleEntries.map(entry => {
     const index = entries.indexOf(entry);
     const button = document.createElement('button');
@@ -97,6 +99,14 @@ function render() {
   });
   document.querySelector('#context-colors').replaceChildren(...colorButtons);
   renderColorFilters(colors);
+}
+
+function parseSearch(value, colors) {
+  const match = value.trim().match(/^<([^>]+)>\s*(.*)$/);
+  if (!match) return { colorId:null, name:value.trim() };
+  const requested = match[1].trim().toLocaleLowerCase();
+  const color = colors.find(item => item.id.toLocaleLowerCase() === requested || item.name.toLocaleLowerCase() === requested);
+  return color ? { colorId:color.id, name:match[2].trim() } : { colorId:null, name:value.trim() };
 }
 
 function emptyState() {
@@ -358,10 +368,33 @@ document.querySelector('#back').onclick = () => refresh('navigation.back');
 document.querySelector('#forward').onclick = () => refresh('navigation.forward');
 document.querySelector('#up').onclick = () => refresh('navigation.up');
 document.querySelector('#home-link').onclick = () => refresh('navigation.open', { path: state.home });
-document.querySelector('#search').oninput = event => { state.query = event.target.value; render(); };
-document.querySelector('#search-colors').onclick = () => {
-  if (!state.colorFilter) { showError(new Error('Choose a color first, then search.')); return; }
-  refresh('color.search', { color:state.colorFilter, query:state.query });
+const searchInput = document.querySelector('#search');
+searchInput.oninput = event => { state.query = event.target.value; render(); };
+searchInput.onkeydown = event => {
+  const start = searchInput.selectionStart;
+  const end = searchInput.selectionEnd;
+  const openingIndex = event.key === 'Backspace' ? start - 1 : event.key === 'Delete' ? start : -1;
+  const closingIndex = openingIndex >= 0 && searchInput.value[openingIndex] === '<'
+    ? searchInput.value.indexOf('>', openingIndex + 1)
+    : -1;
+  if (start === end && closingIndex >= 0) {
+    event.preventDefault();
+    searchInput.setRangeText('', closingIndex, closingIndex + 1, 'preserve');
+    searchInput.setRangeText('', openingIndex, openingIndex + 1, 'start');
+    state.query = searchInput.value;
+    render();
+    return;
+  }
+  if (event.key !== '<' || event.ctrlKey || event.metaKey || event.altKey) return;
+  event.preventDefault();
+  if (start === end && searchInput.value[start] === '>') {
+    searchInput.setRangeText('<', start, end, 'end');
+  } else {
+    searchInput.setRangeText('<>', start, end, 'end');
+    searchInput.setSelectionRange(start + 1, start + 1);
+  }
+  state.query = searchInput.value;
+  render();
 };
 const settingsDialog = document.querySelector('#settings-dialog');
 document.querySelector('#color-settings').onclick = () => {
