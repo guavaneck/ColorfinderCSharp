@@ -379,7 +379,7 @@ document.querySelector('#color-settings').onclick = () => {
 function createRuleRow(rule = { id:'', extension:'', colorId:'blue', enabled:true, priority:0 }) {
   const row = document.createElement('div'); row.className = 'rule-row'; row.dataset.id = rule.id;
   const options = state.snapshot.colors.map(color => `<option value="${color.id}"></option>`).join('');
-  row.innerHTML = `<input class="rule-enabled" type="checkbox" title="Enabled"><input class="rule-extension" placeholder=".pdf" required maxlength="32"><select class="rule-color">${options}</select><input class="rule-priority" type="number" value="0" title="Priority"><button class="rule-delete" type="button" title="Delete rule">×</button>`;
+  row.innerHTML = `<label class="rule-enabled-wrap" title="Enable this rule"><input class="rule-enabled" type="checkbox" aria-label="Enabled"></label><input class="rule-extension" placeholder=".pdf" required maxlength="32" aria-label="Extension"><select class="rule-color" aria-label="Color">${options}</select><input class="rule-priority" type="number" value="0" title="Higher priority wins when rules overlap" aria-label="Priority"><button class="rule-delete" type="button" title="Delete rule">×</button>`;
   row.querySelector('.rule-enabled').checked = rule.enabled; row.querySelector('.rule-extension').value = rule.extension; row.querySelector('.rule-color').value = rule.colorId; row.querySelector('.rule-priority').value = rule.priority;
   [...row.querySelector('.rule-color').options].forEach((option, index) => { option.textContent = state.snapshot.colors[index].name; });
   row.querySelector('.rule-delete').onclick = () => {
