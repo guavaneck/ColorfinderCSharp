@@ -1376,14 +1376,12 @@ Example configuration:
 
 Add:
 
-```text
-Rule creation
-Rule editing
-Rule deletion
-Rule enable/disable
-Rule priority
-Manual override
-```
+- [x] Rule creation
+- [x] Rule editing
+- [x] Rule deletion
+- [x] Rule enable/disable
+- [x] Rule priority
+- [x] Manual override
 
 Test rule precedence carefully.
 

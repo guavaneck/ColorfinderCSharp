@@ -7,6 +7,7 @@ const folderPicker = document.querySelector('#folder-picker');
 let resolveDialog = null;
 let resolveFolderPicker = null;
 let pickerSnapshot = null;
+let deletedRuleIds = [];
 
 function receiveBridgeMessage(message) {
   let response;
@@ -33,13 +34,17 @@ function invoke(action, payload = {}) {
   });
 }
 
-async function refresh(action, payload) {
+async function refresh(action, payload, options = {}) {
   try {
+    const previousSelection = options.preserveSelection ? new Set(state.selectedPaths) : null;
     closeContextMenu();
     document.querySelector('#error').hidden = true;
     state.snapshot = await invoke(action, payload);
     state.home ??= state.snapshot.path;
-    clearSelection();
+    if (previousSelection) {
+      const available = new Set(state.snapshot.entries.map(entry => entry.fullPath));
+      state.selectedPaths = new Set([...previousSelection].filter(path => available.has(path)));
+    } else clearSelection();
     render();
   } catch (error) {
     const alert = document.querySelector('#error');
@@ -65,7 +70,7 @@ function render() {
     const assignedColor = colors.find(color => color.id === entry.colorId);
     const tag = button.querySelector('.tag');
     tag.style.setProperty('--tag', assignedColor?.hexColor ?? 'transparent');
-    tag.title = assignedColor ? `${assignedColor.name} tag` : '';
+    tag.title = assignedColor ? `${assignedColor.name} tag${entry.assignmentType === 'automatic' ? ' (automatic)' : ''}` : '';
     button.onclick = event => selectEntry(event, entry, index);
     button.oncontextmenu = event => {
       event.preventDefault();
@@ -87,7 +92,7 @@ function render() {
     const button = document.createElement('button');
     button.className = 'swatch'; button.title = color.name;
     button.style.setProperty('--swatch', color.hexColor);
-    button.onclick = () => refresh('color.assign', { paths: [...state.selectedPaths], color: color.id });
+    button.onclick = () => refresh('color.assign', { paths: [...state.selectedPaths], color: color.id }, { preserveSelection:true });
     return button;
   });
   document.querySelector('#context-colors').replaceChildren(...colorButtons);
@@ -251,7 +256,7 @@ async function trashSelected() {
 
 async function assignShortcutColor(colorId) {
   if (state.selectedPaths.size)
-    await refresh('color.assign', { paths: [...state.selectedPaths], color: colorId });
+    await refresh('color.assign', { paths: [...state.selectedPaths], color: colorId }, { preserveSelection:true });
 }
 
 function selectionDescription() {
@@ -360,24 +365,42 @@ document.querySelector('#search-colors').onclick = () => {
 };
 const settingsDialog = document.querySelector('#settings-dialog');
 document.querySelector('#color-settings').onclick = () => {
+  deletedRuleIds = [];
   const rows = state.snapshot.colors.map(color => {
     const label = document.createElement('label'); label.className = 'settings-row';
     label.innerHTML = '<span class="color-dot"></span><input maxlength="32" required>';
     label.firstElementChild.style.setProperty('--swatch', color.hexColor); label.lastElementChild.value = color.name; label.lastElementChild.dataset.color = color.id;
     return label;
   });
-  document.querySelector('#settings-colors').replaceChildren(...rows); settingsDialog.showModal();
+  document.querySelector('#settings-colors').replaceChildren(...rows);
+  document.querySelector('#rules-list').replaceChildren(...(state.snapshot.rules ?? []).map(createRuleRow));
+  settingsDialog.showModal();
 };
+function createRuleRow(rule = { id:'', extension:'', colorId:'blue', enabled:true, priority:0 }) {
+  const row = document.createElement('div'); row.className = 'rule-row'; row.dataset.id = rule.id;
+  const options = state.snapshot.colors.map(color => `<option value="${color.id}"></option>`).join('');
+  row.innerHTML = `<input class="rule-enabled" type="checkbox" title="Enabled"><input class="rule-extension" placeholder=".pdf" required maxlength="32"><select class="rule-color">${options}</select><input class="rule-priority" type="number" value="0" title="Priority"><button class="rule-delete" type="button" title="Delete rule">×</button>`;
+  row.querySelector('.rule-enabled').checked = rule.enabled; row.querySelector('.rule-extension').value = rule.extension; row.querySelector('.rule-color').value = rule.colorId; row.querySelector('.rule-priority').value = rule.priority;
+  [...row.querySelector('.rule-color').options].forEach((option, index) => { option.textContent = state.snapshot.colors[index].name; });
+  row.querySelector('.rule-delete').onclick = () => {
+    if (row.dataset.id) deletedRuleIds.push(row.dataset.id);
+    row.remove();
+  };
+  return row;
+}
+document.querySelector('#add-rule').onclick = () => document.querySelector('#rules-list').append(createRuleRow());
 document.querySelector('#settings-cancel').onclick = () => settingsDialog.close();
 document.querySelector('#settings-form').onsubmit = async event => {
   event.preventDefault();
   try {
     for (const input of document.querySelectorAll('#settings-colors input')) await invoke('color.rename', { color:input.dataset.color, name:input.value });
+    for (const id of deletedRuleIds) await invoke('rules.delete', { id });
+    for (const row of document.querySelectorAll('.rule-row')) await invoke('rules.save', { id:row.dataset.id, extension:row.querySelector('.rule-extension').value, color:row.querySelector('.rule-color').value, enabled:row.querySelector('.rule-enabled').checked, priority:Number(row.querySelector('.rule-priority').value) });
     settingsDialog.close(); await refresh('filesystem.listDirectory', { path: state.snapshot.isSearch ? state.home : state.snapshot.path });
   } catch (error) { showError(error); }
 };
 document.querySelector('#context-open').onclick = () => openSelected().catch(showError);
-document.querySelector('#context-clear').onclick = () => refresh('color.remove', { paths: [...state.selectedPaths] });
+document.querySelector('#context-clear').onclick = () => refresh('color.remove', { paths: [...state.selectedPaths] }, { preserveSelection:true });
 document.querySelector('#context-rename').onclick = () => renameSelected().catch(showError);
 document.querySelector('#context-duplicate').onclick = () => duplicateSelected().catch(showError);
 document.querySelector('#context-copy').onclick = () => transferSelected('filesystem.copy').catch(showError);
@@ -449,7 +472,7 @@ document.addEventListener('keydown', event => {
     event.preventDefault();
     const colors = { '1':'red', '2':'orange', '3':'yellow', '4':'green', '5':'blue', '6':'purple' };
     event.key === '0'
-      ? refresh('color.remove', { paths:[...state.selectedPaths] })
+      ? refresh('color.remove', { paths:[...state.selectedPaths] }, { preserveSelection:true })
       : assignShortcutColor(colors[event.key]);
   }
 });

@@ -2,11 +2,12 @@ using System.Text.Json;
 using ColorFinder.Core.Colors;
 using ColorFinder.Core.FileSystem;
 using ColorFinder.Core.Navigation;
+using ColorFinder.Core.Rules;
 using ColorFinder.Desktop.Platform;
 
 namespace ColorFinder.Desktop.Interop;
 
-public sealed class AppBridge(IFileSystemService fileSystem, IColorService colors, NavigationService navigation, IPlatformService platform)
+public sealed class AppBridge(IFileSystemService fileSystem, IColorService colors, IColorRuleService rules, NavigationService navigation, IPlatformService platform)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -53,6 +54,9 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
         "color.list" => await colors.GetColorTagsAsync(),
         "color.rename" => await RenameColorAsync(request),
         "color.search" => await SearchColorsAsync(request),
+        "rules.list" => await rules.GetRulesAsync(),
+        "rules.save" => await SaveRuleAsync(request),
+        "rules.delete" => await DeleteRuleAsync(request),
         _ => throw new InvalidOperationException($"Unknown action '{request.Action}'.")
     };
 
@@ -61,12 +65,28 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
         var entries = await fileSystem.ListDirectoryAsync(path);
         _ = platform.WarmOpenHandlersAsync(entries.Where(entry => !entry.IsDirectory).Select(entry => entry.FullPath));
         var assignments = await colors.GetColorsAsync(entries.Select(entry => entry.FullPath));
+        var activeRules = (await rules.GetRulesAsync()).Where(rule => rule.Enabled).ToArray();
         var rendered = entries.Select(entry => new
         {
             entry.Name, entry.FullPath, entry.Extension, entry.Size, entry.ModifiedDate, entry.IsDirectory,
-            ColorId = assignments.GetValueOrDefault(entry.FullPath)?.ColorId
+            ColorId = assignments.GetValueOrDefault(entry.FullPath)?.ColorId ?? activeRules.FirstOrDefault(rule => rule.Extension.Equals(entry.Extension, StringComparison.OrdinalIgnoreCase))?.ColorId,
+            AssignmentType = assignments.ContainsKey(entry.FullPath) ? "manual" : activeRules.Any(rule => rule.Extension.Equals(entry.Extension, StringComparison.OrdinalIgnoreCase)) ? "automatic" : null
         }).ToArray();
-        return new { path, navigation.CanGoBack, navigation.CanGoForward, Entries = rendered, Colors = await colors.GetColorTagsAsync() };
+        return new { path, navigation.CanGoBack, navigation.CanGoForward, Entries = rendered, Colors = await colors.GetColorTagsAsync(), Rules = await rules.GetRulesAsync() };
+    }
+
+    private async Task<object> SaveRuleAsync(BridgeRequest request)
+    {
+        var rule = new ColorRule(OptionalString(request, "id") ?? string.Empty, RequiredString(request, "extension"),
+            RequiredString(request, "color"), OptionalBool(request, "enabled", true), OptionalInt(request, "priority"));
+        await rules.SaveRuleAsync(rule);
+        return await DirectorySnapshotAsync(navigation.CurrentPath);
+    }
+
+    private async Task<object> DeleteRuleAsync(BridgeRequest request)
+    {
+        await rules.DeleteRuleAsync(RequiredString(request, "id"));
+        return await DirectorySnapshotAsync(navigation.CurrentPath);
     }
 
     private async Task<object> RenameColorAsync(BridgeRequest request)
@@ -195,4 +215,10 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
     private static string? OptionalString(BridgeRequest request, string name) =>
         request.Payload.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String &&
         !string.IsNullOrWhiteSpace(property.GetString()) ? property.GetString() : null;
+
+    private static bool OptionalBool(BridgeRequest request, string name, bool fallback) =>
+        request.Payload.TryGetProperty(name, out var property) && property.ValueKind is JsonValueKind.True or JsonValueKind.False ? property.GetBoolean() : fallback;
+
+    private static int OptionalInt(BridgeRequest request, string name) =>
+        request.Payload.TryGetProperty(name, out var property) && property.TryGetInt32(out var value) ? value : 0;
 }
