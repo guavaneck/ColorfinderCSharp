@@ -128,6 +128,19 @@ public sealed class JsonColorServiceTests : IDisposable
         await Assert.ThrowsAsync<ArgumentException>(() => service.RenameColorAsync("red", name));
     }
 
+    [Fact]
+    public async Task LoadedMetadataIsServedFromTheInMemoryIndex()
+    {
+        var database = Path.Combine(_root, "colors.json");
+        var path = Path.Combine(_root, "indexed.txt");
+        await new JsonColorService(database).AssignColorAsync(path, "blue");
+        var indexedService = new JsonColorService(database);
+        Assert.Equal("blue", (await indexedService.GetColorAsync(path))?.ColorId);
+
+        using var exclusiveLock = File.Open(database, FileMode.Open, FileAccess.Read, FileShare.None);
+        Assert.Equal("blue", (await indexedService.GetColorAsync(path))?.ColorId);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);

@@ -53,6 +53,18 @@ public sealed class JsonColorRuleServiceTests : IDisposable
         await Assert.ThrowsAsync<ArgumentException>(() => service.SaveRuleAsync(new("", extension, "red")));
     }
 
+    [Fact]
+    public async Task LoadedRulesAreServedFromTheInMemoryIndex()
+    {
+        var database = Path.Combine(_root, "rules.json");
+        await new JsonColorRuleService(database).SaveRuleAsync(new("rule", ".pdf", "red"));
+        var indexedService = new JsonColorRuleService(database);
+        Assert.Single(await indexedService.GetRulesAsync());
+
+        using var exclusiveLock = File.Open(database, FileMode.Open, FileAccess.Read, FileShare.None);
+        Assert.Single(await indexedService.GetRulesAsync());
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);

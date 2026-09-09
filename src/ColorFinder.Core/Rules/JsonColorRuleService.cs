@@ -8,6 +8,7 @@ public sealed class JsonColorRuleService(string databasePath) : IColorRuleServic
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private readonly string _databasePath = Path.GetFullPath(databasePath);
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private List<ColorRule>? _rulesIndex;
 
     public static JsonColorRuleService CreateDefault()
     {
@@ -22,7 +23,7 @@ public sealed class JsonColorRuleService(string databasePath) : IColorRuleServic
     public async Task<IReadOnlyList<ColorRule>> GetRulesAsync(CancellationToken cancellationToken = default)
     {
         await _gate.WaitAsync(cancellationToken);
-        try { return (await ReadAsync(cancellationToken)).OrderByDescending(rule => rule.Priority).ThenBy(rule => rule.Extension).ToArray(); }
+        try { return (await GetRulesIndexAsync(cancellationToken)).OrderByDescending(rule => rule.Priority).ThenBy(rule => rule.Extension).ToArray(); }
         finally { _gate.Release(); }
     }
 
@@ -35,7 +36,7 @@ public sealed class JsonColorRuleService(string databasePath) : IColorRuleServic
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            var rules = await ReadAsync(cancellationToken);
+            var rules = await GetRulesIndexAsync(cancellationToken);
             var index = rules.FindIndex(item => item.Id == saved.Id);
             if (index < 0) rules.Add(saved); else rules[index] = saved;
             await WriteAsync(rules, cancellationToken);
@@ -47,7 +48,7 @@ public sealed class JsonColorRuleService(string databasePath) : IColorRuleServic
     public async Task DeleteRuleAsync(string id, CancellationToken cancellationToken = default)
     {
         await _gate.WaitAsync(cancellationToken);
-        try { var rules = await ReadAsync(cancellationToken); rules.RemoveAll(rule => rule.Id == id); await WriteAsync(rules, cancellationToken); }
+        try { var rules = await GetRulesIndexAsync(cancellationToken); rules.RemoveAll(rule => rule.Id == id); await WriteAsync(rules, cancellationToken); }
         finally { _gate.Release(); }
     }
 
@@ -58,11 +59,12 @@ public sealed class JsonColorRuleService(string databasePath) : IColorRuleServic
         return (await GetRulesAsync(cancellationToken)).FirstOrDefault(rule => rule.Enabled && rule.Extension.Equals(extension, StringComparison.OrdinalIgnoreCase));
     }
 
-    private async Task<List<ColorRule>> ReadAsync(CancellationToken cancellationToken)
+    private async Task<List<ColorRule>> GetRulesIndexAsync(CancellationToken cancellationToken)
     {
-        if (!File.Exists(_databasePath)) return [];
+        if (_rulesIndex is not null) return _rulesIndex;
+        if (!File.Exists(_databasePath)) return _rulesIndex = [];
         await using var stream = File.OpenRead(_databasePath);
-        return await JsonSerializer.DeserializeAsync<List<ColorRule>>(stream, JsonOptions, cancellationToken) ?? [];
+        return _rulesIndex = await JsonSerializer.DeserializeAsync<List<ColorRule>>(stream, JsonOptions, cancellationToken) ?? [];
     }
 
     private async Task WriteAsync(List<ColorRule> rules, CancellationToken cancellationToken)

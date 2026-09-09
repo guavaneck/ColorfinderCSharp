@@ -8,6 +8,8 @@ public sealed class JsonColorService : IColorService
     private readonly string _databasePath;
     private readonly string _settingsPath;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private Dictionary<string, ColorMetadata>? _dataIndex;
+    private Dictionary<string, string>? _settingsIndex;
 
     public JsonColorService(string databasePath)
     {
@@ -60,7 +62,7 @@ public sealed class JsonColorService : IColorService
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            var data = await ReadAsync(cancellationToken);
+            var data = await GetDataIndexAsync(cancellationToken);
             return data.GetValueOrDefault(NormalizePath(path));
         }
         finally { _gate.Release(); }
@@ -72,7 +74,7 @@ public sealed class JsonColorService : IColorService
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            var data = await ReadAsync(cancellationToken);
+            var data = await GetDataIndexAsync(cancellationToken);
             return data.Where(item => normalizedPaths.Contains(item.Key))
                 .ToDictionary(item => item.Key, item => item.Value, PathComparer);
         }
@@ -84,7 +86,7 @@ public sealed class JsonColorService : IColorService
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            var data = await ReadAsync(cancellationToken);
+            var data = await GetDataIndexAsync(cancellationToken);
             return data.Values.Where(item => item.ColorId.Equals(colorId, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(item => item.Path, StringComparer.OrdinalIgnoreCase).ToArray();
         }
@@ -96,7 +98,7 @@ public sealed class JsonColorService : IColorService
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            var names = await ReadSettingsAsync(cancellationToken);
+            var names = await GetSettingsIndexAsync(cancellationToken);
             return ColorTag.BuiltIn.Select(color => names.TryGetValue(color.Id, out var name)
                 ? color with { Name = name }
                 : color).ToArray();
@@ -113,7 +115,7 @@ public sealed class JsonColorService : IColorService
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            var names = await ReadSettingsAsync(cancellationToken);
+            var names = await GetSettingsIndexAsync(cancellationToken);
             names[color.Id] = cleaned;
             Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
             await using var stream = File.Create(_settingsPath);
@@ -144,7 +146,7 @@ public sealed class JsonColorService : IColorService
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            var data = await ReadAsync(cancellationToken);
+            var data = await GetDataIndexAsync(cancellationToken);
             mutation(data);
             Directory.CreateDirectory(Path.GetDirectoryName(_databasePath)!);
             var temporaryPath = _databasePath + ".tmp";
@@ -172,20 +174,22 @@ public sealed class JsonColorService : IColorService
         }, cancellationToken);
     }
 
-    private async Task<Dictionary<string, ColorMetadata>> ReadAsync(CancellationToken cancellationToken)
+    private async Task<Dictionary<string, ColorMetadata>> GetDataIndexAsync(CancellationToken cancellationToken)
     {
-        if (!File.Exists(_databasePath)) return new Dictionary<string, ColorMetadata>(PathComparer);
+        if (_dataIndex is not null) return _dataIndex;
+        if (!File.Exists(_databasePath)) return _dataIndex = new Dictionary<string, ColorMetadata>(PathComparer);
         await using var stream = File.OpenRead(_databasePath);
         var stored = await JsonSerializer.DeserializeAsync<Dictionary<string, ColorMetadata>>(stream, JsonOptions, cancellationToken);
-        return new Dictionary<string, ColorMetadata>(stored ?? [], PathComparer);
+        return _dataIndex = new Dictionary<string, ColorMetadata>(stored ?? [], PathComparer);
     }
 
-    private async Task<Dictionary<string, string>> ReadSettingsAsync(CancellationToken cancellationToken)
+    private async Task<Dictionary<string, string>> GetSettingsIndexAsync(CancellationToken cancellationToken)
     {
-        if (!File.Exists(_settingsPath)) return new(StringComparer.OrdinalIgnoreCase);
+        if (_settingsIndex is not null) return _settingsIndex;
+        if (!File.Exists(_settingsPath)) return _settingsIndex = new(StringComparer.OrdinalIgnoreCase);
         await using var stream = File.OpenRead(_settingsPath);
         var stored = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(stream, JsonOptions, cancellationToken);
-        return new(stored ?? [], StringComparer.OrdinalIgnoreCase);
+        return _settingsIndex = new(stored ?? [], StringComparer.OrdinalIgnoreCase);
     }
 
     private static StringComparer PathComparer => OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;

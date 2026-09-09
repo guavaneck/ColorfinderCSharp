@@ -159,6 +159,7 @@ Linux:
 .NET Runtime
 GTK
 WebKitGTK
+GStreamer base plugins (including appsink)
 ```
 
 macOS:
@@ -1409,6 +1410,14 @@ Begin evaluating whether the simple metadata storage system is still sufficient.
 
 If performance requires it, introduce a dedicated index.
 
+The JSON metadata was being reparsed for every directory refresh. Version 0.6 keeps an in-memory index of color assignments, custom color names, and automatic rules while retaining atomic JSON persistence and compatibility across launches.
+
+- [x] Cache color assignments after the initial load
+- [x] Cache custom color names after the initial load
+- [x] Cache automatic rules after the initial load
+- [x] Keep the index synchronized with mutations
+- [x] Preserve the existing on-disk format
+
 Potentially:
 
 ```text
@@ -1425,7 +1434,7 @@ Metadata
 Search information
 ```
 
-Do not do this unless measurements show it is needed.
+Do not introduce SQLite unless later measurements show that the lightweight index is insufficient.
 
 ---
 
