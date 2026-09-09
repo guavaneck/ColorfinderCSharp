@@ -42,6 +42,7 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
         "navigation.forward" => await DirectorySnapshotAsync(navigation.Forward()),
         "navigation.up" => await DirectorySnapshotAsync(navigation.Up()),
         "filesystem.open" => OpenFile(request),
+        "filesystem.preview" => await PreviewAsync(request),
         "filesystem.createDirectory" => await CreateDirectoryAsync(request),
         "filesystem.rename" => await RenameAsync(request),
         "filesystem.duplicate" => await DuplicateAsync(request),
@@ -70,7 +71,41 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
             ColorId = assignments.GetValueOrDefault(entry.FullPath)?.ColorId ?? activeRules.FirstOrDefault(rule => rule.Extension.Equals(entry.Extension, StringComparison.OrdinalIgnoreCase))?.ColorId,
             AssignmentType = assignments.ContainsKey(entry.FullPath) ? "manual" : activeRules.Any(rule => rule.Extension.Equals(entry.Extension, StringComparison.OrdinalIgnoreCase)) ? "automatic" : null
         }).ToArray();
-        return new { path, navigation.CanGoBack, navigation.CanGoForward, Entries = rendered, Colors = await colors.GetColorTagsAsync(), Rules = await rules.GetRulesAsync() };
+        return new { path, navigation.CanGoBack, navigation.CanGoForward, Entries = rendered, Colors = await colors.GetColorTagsAsync(), Rules = await rules.GetRulesAsync(), Locations = SidebarLocations() };
+    }
+
+    private object SidebarLocations()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var favorites = new[]
+        {
+            ("Home", home), ("Desktop", Path.Combine(home, "Desktop")), ("Documents", Path.Combine(home, "Documents")),
+            ("Downloads", Path.Combine(home, "Downloads")), ("Pictures", Path.Combine(home, "Pictures"))
+        }.Where(item => Directory.Exists(item.Item2)).Select(item => new { Name = item.Item1, Path = item.Item2 });
+        var volumeRoot = OperatingSystem.IsMacOS() ? "/Volumes" : Directory.Exists(Path.Combine("/run/media", Environment.UserName))
+            ? Path.Combine("/run/media", Environment.UserName) : "/mnt";
+        IEnumerable<object> volumes = [];
+        try { if (Directory.Exists(volumeRoot)) volumes = Directory.EnumerateDirectories(volumeRoot).Select(path => (object)new { Name = Path.GetFileName(path), Path = path }).ToArray(); }
+        catch (UnauthorizedAccessException) { }
+        return new { Favorites = favorites.ToArray(), Volumes = volumes };
+    }
+
+    private async Task<object> PreviewAsync(BridgeRequest request)
+    {
+        var path = Path.GetFullPath(RequiredString(request, "path"));
+        if (Directory.Exists(path)) return new { Kind = "folder", Content = (string?)null };
+        if (!File.Exists(path)) throw new FileNotFoundException("The item no longer exists.", path);
+        var extension = Path.GetExtension(path).ToLowerInvariant();
+        if (new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg" }.Contains(extension))
+            return new { Kind = "image", Content = new Uri(path).AbsoluteUri };
+        if (new[] { ".txt", ".md", ".cs", ".json", ".xml", ".html", ".css", ".js", ".sh", ".nix", ".log", ".yaml", ".yml" }.Contains(extension))
+        {
+            var buffer = new char[16_384];
+            using var reader = File.OpenText(path);
+            var count = await reader.ReadBlockAsync(buffer, 0, buffer.Length);
+            return new { Kind = "text", Content = new string(buffer, 0, count), Truncated = !reader.EndOfStream };
+        }
+        return new { Kind = "file", Content = (string?)null };
     }
 
     private async Task<object> SaveRuleAsync(BridgeRequest request)

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>ColorFinder</title>
   <style>
-    :root { color-scheme:dark; --bg:#111318; --surface:#1a1d24; --surface2:#232730; --text:#eef1f6; --muted:#9299a8; --accent:#74a2ff; }
+    :root { color-scheme:dark; --bg:#111318; --surface:#1a1d24; --surface2:#232730; --text:#eef1f6; --muted:#9299a8; --accent:#74a2ff; --sidebar-width:210px; }
     * { box-sizing:border-box; }
     html, body { width:100%; height:100%; }
     body { margin:0; overflow:hidden; background:#111318; background:var(--bg); color:#eef1f6; color:var(--text); font:14px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif; }
@@ -14,23 +14,27 @@
     button:hover:not(:disabled), button.active { background:#343a48; }
     .toolbar { height:58px; display:flex; align-items:center; gap:16px; padding:10px 14px; background:#1a1d24; background:var(--surface); border-bottom:1px solid #2b303a; }
     .toolbar nav { display:flex; flex:0 0 auto; gap:5px; }
-    .toolbar nav button { font-size:22px; line-height:20px; min-width:36px; }
+    .toolbar .navigation-controls button { font-size:22px; line-height:20px; min-width:36px; }
     .breadcrumbs { flex:1 1 auto; min-width:80px; display:flex; align-items:center; overflow:auto hidden; white-space:nowrap; background:#101217; border:1px solid #303541; border-radius:8px; padding:3px 6px; scrollbar-width:none; }
     .breadcrumbs::-webkit-scrollbar { display:none; }
     .breadcrumb { flex:0 0 auto; padding:5px 7px; background:transparent; }
     .breadcrumb + .breadcrumb::before { content:'›'; color:#9299a8; margin-right:12px; pointer-events:none; }
     .view-toggle { display:flex; flex:0 0 auto; gap:3px; }
     .search-box { width:min(260px,24vw); padding:8px 10px; border:1px solid #303541; border-radius:8px; background:#101217; color:inherit; font:inherit; }
-    main { height:calc(100% - 58px); display:grid; grid-template-columns:190px minmax(0,1fr); }
-    aside { padding:20px 14px; background:#171a20; border-right:1px solid #292d36; overflow:hidden; }
-    aside h2 { color:#9299a8; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.08em; margin:0 8px 10px; }
+    main { height:calc(100% - 58px); display:grid; grid-template-columns:var(--sidebar-width) minmax(0,1fr) 270px; }
+    body.sidebar-collapsed main { grid-template-columns:54px minmax(0,1fr) 270px; }
+    aside { position:relative; padding:16px 12px; background:#171a20; border-right:1px solid #292d36; overflow:auto; }
+    aside h2 { color:#9299a8; color:var(--muted); font-size:14px; text-transform:uppercase; letter-spacing:.08em; margin:0 8px 10px; }
     .sidebar-link { width:100%; text-align:left; background:transparent; }
+    .sidebar-heading { height:28px; display:flex; align-items:flex-start; justify-content:space-between; }.sidebar-heading h2 { margin-top:5px; }.sidebar-toggle { flex:none; padding:3px 6px; background:transparent; font-size:16px; line-height:18px; }.sidebar-resizer { position:absolute; z-index:5; top:0; right:-3px; width:7px; height:100%; cursor:col-resize; }.sidebar-section + .sidebar-section { margin-top:20px; }.location-link { display:flex; align-items:center; gap:8px; width:100%; padding:7px 9px; text-align:left; background:transparent; overflow:hidden; }.location-link span:last-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.location-link.active { background:#303746; }
+    .sidebar-collapsed aside { padding-inline:7px; }.sidebar-collapsed aside h2 { visibility:hidden; }.sidebar-collapsed .location-link span:last-child,.sidebar-collapsed #color-settings .sidebar-label,.sidebar-collapsed .color-filter > span:last-child { display:none; }.sidebar-collapsed .sidebar-heading { justify-content:center; }.sidebar-collapsed .sidebar-heading h2 { position:absolute; }.sidebar-collapsed .sidebar-toggle { transform:rotate(180deg); }.sidebar-collapsed .sidebar-resizer { display:none; }.sidebar-collapsed .location-link,.sidebar-collapsed .color-filter { justify-content:center; padding-inline:5px; }.sidebar-collapsed .color-actions { display:block; }.sidebar-collapsed #color-settings { width:100%; font-size:0; }.sidebar-collapsed #color-settings::after { content:'⚙'; font-size:15px; }
     .color-filters { display:flex; flex-direction:column; gap:3px; margin-bottom:10px; }
     .color-filter { display:flex; align-items:center; gap:9px; width:100%; text-align:left; background:transparent; }
     .color-dot { width:12px; height:12px; flex:none; border-radius:50%; background:var(--swatch); }
     .color-filter.active { background:#343a48; }
-    .color-actions { display:flex; gap:5px; margin:8px 0; }.color-actions button { flex:1; padding:6px; font-size:12px; }
+    .color-actions { display:flex; gap:5px; margin:8px 0; }.color-actions button { flex:1; padding:6px; font-size:14px; }
     .browser { position:relative; min-width:0; min-height:0; overflow:hidden; }
+    .info-panel { min-width:0; padding:18px; overflow:auto; background:#171a20; border-left:1px solid #292d36; }.preview { display:flex; align-items:center; justify-content:center; width:100%; min-height:160px; max-height:280px; margin-bottom:16px; overflow:hidden; border-radius:10px; background:#101217; }.preview img { width:100%; height:100%; max-height:280px; object-fit:contain; }.preview pre { width:100%; max-height:260px; margin:0; padding:12px; overflow:auto; color:#cdd3df; font:11px/1.45 ui-monospace,monospace; white-space:pre-wrap; }.preview-icon { font-size:64px; }.info-panel h2 { margin:0 0 16px; overflow-wrap:anywhere; font-size:16px; }.info-list { display:grid; grid-template-columns:auto 1fr; gap:8px 10px; margin:0; font-size:12px; }.info-list dt { color:var(--muted); }.info-list dd { min-width:0; margin:0; overflow-wrap:anywhere; }.drop-target { outline:2px solid var(--accent); background:#26334a!important; }
     .entries { height:100%; overflow:auto; padding:20px; align-content:start; }
     .entries.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(126px,1fr)); gap:12px; }
     .entry { position:relative; min-width:0; border:1px solid transparent; border-radius:10px; background:transparent; color:inherit; text-align:center; padding:14px 8px 11px; }
@@ -79,30 +83,32 @@
     .dialog-form .rule-help { margin:5px 0 0; font-size:12px; }
     #error { margin:12px; padding:12px; border-radius:8px; background:#5b2525; }
     #error[hidden] { display:none; }
-    @media (max-width:800px) { main { grid-template-columns:1fr; } aside { display:none; } .view-toggle { display:none; } }
+    @media (max-width:950px) { main { grid-template-columns:var(--sidebar-width) minmax(0,1fr); } body.sidebar-collapsed main { grid-template-columns:54px minmax(0,1fr); }.info-panel { display:none; } }
+    @media (max-width:700px) { main,body.sidebar-collapsed main { grid-template-columns:54px minmax(0,1fr); } aside { padding-inline:7px; } aside h2 { visibility:hidden; }.location-link span:last-child,#color-settings .sidebar-label,.color-filter > span:last-child { display:none; }.sidebar-heading { justify-content:center; }.sidebar-heading h2 { position:absolute; }.sidebar-resizer { display:none; }.location-link,.color-filter { justify-content:center; padding-inline:5px; }.color-actions { display:block; } #color-settings { width:100%; font-size:0; } #color-settings::after { content:'⚙'; font-size:15px; }.view-toggle { display:none; } }
   </style>
 </head>
 <body>
   <header class="toolbar">
-    <nav aria-label="Directory navigation">
+    <nav class="navigation-controls" aria-label="Directory navigation">
       <button id="back" title="Back">‹</button><button id="forward" title="Forward">›</button><button id="up" title="Up">↑</button>
     </nav>
     <nav id="path" class="breadcrumbs" aria-label="Current path">Loading…</nav>
     <input id="search" class="search-box" type="search" placeholder="Search" aria-label="Search files" title="Use &lt;color&gt; name to search by color and name, for example: &lt;orange&gt; Downloads">
+    <button id="new-folder" title="New Folder">＋</button>
     <div class="view-toggle"><button id="grid-view" class="active">Grid</button><button id="list-view">List</button></div>
   </header>
   <main>
-    <aside>
-      <h2>Favorites</h2>
-      <button id="home-link" class="sidebar-link">⌂ Home</button>
-      <h2 style="margin-top:24px">Colors</h2>
-      <div id="color-filters" class="color-filters"></div>
-      <div class="color-actions"><button id="color-settings">Settings</button></div>
+    <aside id="sidebar">
+      <div id="sidebar-resizer" class="sidebar-resizer" aria-hidden="true"></div>
+      <section class="sidebar-section"><div class="sidebar-heading"><h2>Favorites</h2><button id="toggle-sidebar" class="sidebar-toggle" title="Collapse Sidebar" aria-label="Collapse Sidebar">‹</button></div><div id="favorite-locations"></div></section>
+      <section id="volumes-section" class="sidebar-section"><h2>Locations</h2><div id="volume-locations"></div></section>
+      <section class="sidebar-section"><h2>Colors</h2><div id="color-filters" class="color-filters"></div><div class="color-actions"><button id="color-settings"><span class="sidebar-label">Settings</span></button></div></section>
     </aside>
     <section class="browser">
       <div id="error" role="alert" hidden></div>
       <div id="entries" class="entries grid" aria-live="polite"></div>
     </section>
+    <section id="info-panel" class="info-panel" aria-label="File information"><div id="preview" class="preview"><span class="preview-icon">⌁</span></div><h2 id="info-name">Select an item</h2><dl id="info-list" class="info-list"></dl></section>
   </main>
   <div id="context-menu" class="context-menu" role="menu" hidden>
     <button id="context-open" role="menuitem">Open</button>

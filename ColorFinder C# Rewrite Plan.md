@@ -1444,18 +1444,15 @@ Focus heavily on usability.
 
 Add:
 
-```text
-Better sidebar
-Favorites
-Recent locations
-Mounted drives
-Improved breadcrumbs
-Quick Look-style preview
-Drag and drop
-Better context menus
-File info panel
-Toolbar customization
-```
+- [x] Better sidebar
+- [x] Standard-folder favorites
+- [x] Mounted drives
+- [x] Improved breadcrumbs
+- [x] Quick Look-style image and text preview
+- [x] Internal drag-and-drop moves
+- [x] Better context menus
+- [x] File info panel
+- [x] Toolbar controls for new folders and sidebar collapse
 
 Color coding should remain integrated throughout the UI.
 

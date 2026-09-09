@@ -1,4 +1,4 @@
-const state = { snapshot: null, selectedPaths: new Set(), anchorIndex: -1, home: null, view: 'grid', pending: new Map(), colorFilter: null, query: '' };
+const state = { snapshot: null, selectedPaths: new Set(), anchorIndex: -1, home: null, view: 'grid', pending: new Map(), colorFilter: null, query: '', preview:null };
 const entriesElement = document.querySelector('#entries');
 const contextMenu = document.querySelector('#context-menu');
 const appDialog = document.querySelector('#app-dialog');
@@ -65,6 +65,7 @@ function render() {
   entriesElement.replaceChildren(...visibleEntries.map(entry => {
     const index = entries.indexOf(entry);
     const button = document.createElement('button');
+    button.draggable = true;
     button.className = `entry${state.selectedPaths.has(entry.fullPath) ? ' selected' : ''}`;
     button.title = entry.fullPath;
     button.innerHTML = `<span class="icon">${entry.isDirectory ? '📁' : '📄'}</span><span class="name"></span><span class="kind">${entry.isDirectory ? 'Folder' : formatSize(entry.size)}</span><span class="modified">${new Date(entry.modifiedDate).toLocaleDateString()}</span><span class="tag"></span>`;
@@ -73,7 +74,16 @@ function render() {
     const tag = button.querySelector('.tag');
     tag.style.setProperty('--tag', assignedColor?.hexColor ?? 'transparent');
     tag.title = assignedColor ? `${assignedColor.name} tag${entry.assignmentType === 'automatic' ? ' (automatic)' : ''}` : '';
-    button.onclick = event => selectEntry(event, entry, index);
+    button.onclick = event => { selectEntry(event, entry, index); loadSelectionPreview(); };
+    button.ondragstart = event => {
+      if (!state.selectedPaths.has(entry.fullPath)) { state.selectedPaths = new Set([entry.fullPath]); state.anchorIndex = index; render(); }
+      event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('application/x-colorfinder-paths', JSON.stringify([...state.selectedPaths]));
+    };
+    if (entry.isDirectory) {
+      button.ondragover = event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; button.classList.add('drop-target'); };
+      button.ondragleave = () => button.classList.remove('drop-target');
+      button.ondrop = event => { event.preventDefault(); button.classList.remove('drop-target'); moveDroppedItems(event, entry.fullPath); };
+    }
     button.oncontextmenu = event => {
       event.preventDefault();
       event.stopPropagation();
@@ -82,6 +92,7 @@ function render() {
         state.selectedPaths.add(entry.fullPath);
         state.anchorIndex = index;
         render();
+        loadSelectionPreview();
       }
       showContextMenu(event.clientX, event.clientY, false);
     };
@@ -99,6 +110,59 @@ function render() {
   });
   document.querySelector('#context-colors').replaceChildren(...colorButtons);
   renderColorFilters(colors);
+  renderSidebar();
+  renderInfo();
+}
+
+function renderSidebar() {
+  const locations = state.snapshot.locations ?? { favorites:[], volumes:[] };
+  renderLocations('#favorite-locations', locations.favorites, '📁');
+  renderLocations('#volume-locations', locations.volumes, '▣');
+  document.querySelector('#volumes-section').hidden = !locations.volumes.length;
+}
+
+function renderLocations(selector, locations, icon) {
+  const buttons = locations.map(location => {
+    const button = document.createElement('button'); button.className = `location-link${location.path === state.snapshot.path ? ' active' : ''}`;
+    button.innerHTML = `<span>${icon}</span><span></span>`; button.lastElementChild.textContent = location.name; button.title = location.path;
+    button.onclick = () => refresh('navigation.open', { path:location.path }); return button;
+  });
+  document.querySelector(selector).replaceChildren(...buttons);
+}
+
+function renderInfo() {
+  const selected = selectedEntries();
+  const preview = document.querySelector('#preview');
+  if (selected.length !== 1) {
+    preview.innerHTML = '<span class="preview-icon">⌁</span>';
+    document.querySelector('#info-name').textContent = selected.length ? `${selected.length} items selected` : 'Select an item';
+    document.querySelector('#info-list').replaceChildren(); return;
+  }
+  const entry = selected[0]; document.querySelector('#info-name').textContent = entry.name;
+  if (state.preview?.path === entry.fullPath) {
+    if (state.preview.kind === 'image') { const image = document.createElement('img'); image.src = state.preview.content; image.alt = ''; preview.replaceChildren(image); }
+    else if (state.preview.kind === 'text') { const text = document.createElement('pre'); text.textContent = state.preview.content + (state.preview.truncated ? '\n…' : ''); preview.replaceChildren(text); }
+    else { preview.innerHTML = `<span class="preview-icon">${entry.isDirectory ? '📁' : '📄'}</span>`; }
+  } else preview.innerHTML = `<span class="preview-icon">${entry.isDirectory ? '📁' : '📄'}</span>`;
+  const color = state.snapshot.colors.find(item => item.id === entry.colorId);
+  const details = [['Kind', entry.isDirectory ? 'Folder' : entry.extension || 'File'], ['Size', entry.isDirectory ? '—' : formatSize(entry.size)], ['Modified', new Date(entry.modifiedDate).toLocaleString()], ['Color', color?.name ?? 'None'], ['Path', entry.fullPath]];
+  document.querySelector('#info-list').replaceChildren(...details.flatMap(([label, value]) => { const dt = document.createElement('dt'); dt.textContent = label; const dd = document.createElement('dd'); dd.textContent = value; return [dt, dd]; }));
+}
+
+async function loadSelectionPreview() {
+  const selected = selectedEntries();
+  if (selected.length !== 1) { state.preview = null; renderInfo(); return; }
+  const path = selected[0].fullPath; state.preview = null; renderInfo();
+  try { const result = await invoke('filesystem.preview', { path }); if (selectedEntries().length === 1 && selectedEntries()[0].fullPath === path) { state.preview = { path, ...result }; renderInfo(); } }
+  catch (error) { showError(error); }
+}
+
+async function moveDroppedItems(event, destination) {
+  try {
+    const paths = JSON.parse(event.dataTransfer.getData('application/x-colorfinder-paths') || '[]').filter(path => path !== destination);
+    if (!paths.length) return;
+    await refresh('filesystem.move', { paths, destination });
+  } catch (error) { showError(error); }
 }
 
 function parseSearch(value, colors) {
@@ -122,7 +186,8 @@ function renderSearchHeading() {
 }
 
 function renderColorFilters(colors) {
-  const all = document.createElement('button'); all.className = `color-filter${state.colorFilter ? '' : ' active'}`; all.textContent = 'All items';
+  const all = document.createElement('button'); all.className = `color-filter${state.colorFilter ? '' : ' active'}`;
+  all.innerHTML = '<span title="All items">◌</span><span>All items</span>';
   all.onclick = () => { state.colorFilter = null; render(); };
   const buttons = colors.map(color => {
     const button = document.createElement('button'); button.className = `color-filter${state.colorFilter === color.id ? ' active' : ''}`;
@@ -179,6 +244,7 @@ function selectEntry(event, entry, index) {
 function clearSelection() {
   state.selectedPaths.clear();
   state.anchorIndex = -1;
+  state.preview = null;
 }
 
 function showContextMenu(x, y, emptySpace) {
@@ -367,7 +433,25 @@ function formatSize(bytes) {
 document.querySelector('#back').onclick = () => refresh('navigation.back');
 document.querySelector('#forward').onclick = () => refresh('navigation.forward');
 document.querySelector('#up').onclick = () => refresh('navigation.up');
-document.querySelector('#home-link').onclick = () => refresh('navigation.open', { path: state.home });
+document.querySelector('#new-folder').onclick = () => createFolder().catch(showError);
+document.querySelector('#toggle-sidebar').onclick = event => {
+  const collapsed = document.body.classList.toggle('sidebar-collapsed');
+  event.currentTarget.title = collapsed ? 'Expand Sidebar' : 'Collapse Sidebar';
+  event.currentTarget.setAttribute('aria-label', event.currentTarget.title);
+};
+const sidebarResizer = document.querySelector('#sidebar-resizer');
+sidebarResizer.onpointerdown = event => {
+  if (document.body.classList.contains('sidebar-collapsed') || window.innerWidth <= 700) return;
+  event.preventDefault();
+  sidebarResizer.setPointerCapture(event.pointerId);
+};
+sidebarResizer.onpointermove = event => {
+  if (!sidebarResizer.hasPointerCapture(event.pointerId)) return;
+  document.documentElement.style.setProperty('--sidebar-width', `${Math.max(150, Math.min(360, event.clientX))}px`);
+};
+sidebarResizer.onpointerup = event => {
+  if (sidebarResizer.hasPointerCapture(event.pointerId)) sidebarResizer.releasePointerCapture(event.pointerId);
+};
 const searchInput = document.querySelector('#search');
 searchInput.oninput = event => { state.query = event.target.value; render(); };
 searchInput.onkeydown = event => {
