@@ -15,7 +15,7 @@ The UI will use the operating system's WebView implementation rather than bundli
 
 ## Implementation Status
 
-Last reviewed: 2026-09-07
+Last reviewed: 2026-09-09
 
 - [x] The repository is separated into Core, Desktop, UI, and Core test projects.
 - [x] The desktop host uses the operating system WebView through Photino; Chromium is not bundled.
@@ -1333,15 +1333,13 @@ This should be the point where ColorFinder starts becoming meaningfully differen
 
 Add:
 
-```text
-Full color picker/tag UI
-Color context-menu options
-Keyboard color shortcuts
-Color-based filtering
-Color-based search
-Custom color names
-Color settings
-```
+- [x] Full color picker/tag UI
+- [x] Color context-menu options
+- [x] Keyboard color shortcuts
+- [x] Color-based filtering
+- [x] Color-based search
+- [x] Custom color names
+- [x] Color settings
 
 At this stage:
 

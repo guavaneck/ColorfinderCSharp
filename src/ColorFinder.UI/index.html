@@ -20,10 +20,16 @@
     .breadcrumb { flex:0 0 auto; padding:5px 7px; background:transparent; }
     .breadcrumb + .breadcrumb::before { content:'›'; color:#9299a8; margin-right:12px; pointer-events:none; }
     .view-toggle { display:flex; flex:0 0 auto; gap:3px; }
+    .search-box { width:min(260px,24vw); padding:8px 10px; border:1px solid #303541; border-radius:8px; background:#101217; color:inherit; font:inherit; }
     main { height:calc(100% - 58px); display:grid; grid-template-columns:190px minmax(0,1fr); }
     aside { padding:20px 14px; background:#171a20; border-right:1px solid #292d36; overflow:hidden; }
     aside h2 { color:#9299a8; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.08em; margin:0 8px 10px; }
     .sidebar-link { width:100%; text-align:left; background:transparent; }
+    .color-filters { display:flex; flex-direction:column; gap:3px; margin-bottom:10px; }
+    .color-filter { display:flex; align-items:center; gap:9px; width:100%; text-align:left; background:transparent; }
+    .color-dot { width:12px; height:12px; flex:none; border-radius:50%; background:var(--swatch); }
+    .color-filter.active { background:#343a48; }
+    .color-actions { display:flex; gap:5px; margin:8px 0; }.color-actions button { flex:1; padding:6px; font-size:12px; }
     .hint { margin:28px 9px; color:#9299a8; color:var(--muted); font-size:12px; line-height:1.5; }
     .browser { position:relative; min-width:0; min-height:0; overflow:hidden; }
     .entries { height:100%; overflow:auto; padding:20px; align-content:start; }
@@ -67,6 +73,9 @@
     .picker-empty { padding:18px; color:#9299a8; text-align:center; }
     .swatch { width:30px; height:30px; padding:0; border-radius:50%; background:var(--swatch); border:2px solid rgba(255,255,255,.18); }
     .swatch:hover { transform:scale(1.1); background:var(--swatch)!important; }
+    .context-colors .swatch.active { outline:2px solid white; outline-offset:2px; }
+    .empty-state { grid-column:1/-1; padding:48px 20px; color:var(--muted); text-align:center; }
+    .settings-colors { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }.settings-row { display:grid; grid-template-columns:18px 1fr; align-items:center; gap:10px; }.settings-row input { margin:0; }
     #error { margin:12px; padding:12px; border-radius:8px; background:#5b2525; }
     #error[hidden] { display:none; }
     @media (max-width:800px) { main { grid-template-columns:1fr; } aside { display:none; } .view-toggle { display:none; } }
@@ -78,12 +87,16 @@
       <button id="back" title="Back">‹</button><button id="forward" title="Forward">›</button><button id="up" title="Up">↑</button>
     </nav>
     <nav id="path" class="breadcrumbs" aria-label="Current path">Loading…</nav>
+    <input id="search" class="search-box" type="search" placeholder="Filter by name" aria-label="Filter by file name">
     <div class="view-toggle"><button id="grid-view" class="active">Grid</button><button id="list-view">List</button></div>
   </header>
   <main>
     <aside>
       <h2>Favorites</h2>
       <button id="home-link" class="sidebar-link">⌂ Home</button>
+      <h2 style="margin-top:24px">Colors</h2>
+      <div id="color-filters" class="color-filters"></div>
+      <div class="color-actions"><button id="search-colors" title="Search tagged items everywhere">Search</button><button id="color-settings">Settings</button></div>
       <div class="hint">Double-click to open. Right-click an item for file and color actions.</div>
     </aside>
     <section class="browser">
@@ -116,6 +129,14 @@
         <button id="dialog-cancel" type="button">Cancel</button>
         <button id="dialog-confirm" class="dialog-confirm" type="submit">OK</button>
       </div>
+    </form>
+  </dialog>
+  <dialog id="settings-dialog" class="app-dialog">
+    <form id="settings-form" class="dialog-form">
+      <h2>Color Settings</h2>
+      <p>Choose the names shown for your color tags.</p>
+      <div id="settings-colors" class="settings-colors"></div>
+      <div class="dialog-actions"><button id="settings-cancel" type="button">Cancel</button><button class="dialog-confirm" type="submit">Save</button></div>
     </form>
   </dialog>
   <dialog id="folder-picker" class="app-dialog folder-picker">

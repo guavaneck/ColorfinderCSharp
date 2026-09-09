@@ -6,9 +6,14 @@ public sealed class JsonColorService : IColorService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private readonly string _databasePath;
+    private readonly string _settingsPath;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    public JsonColorService(string databasePath) => _databasePath = Path.GetFullPath(databasePath);
+    public JsonColorService(string databasePath)
+    {
+        _databasePath = Path.GetFullPath(databasePath);
+        _settingsPath = Path.Combine(Path.GetDirectoryName(_databasePath)!, "settings.json");
+    }
 
     public static JsonColorService CreateDefault()
     {
@@ -86,6 +91,37 @@ public sealed class JsonColorService : IColorService
         finally { _gate.Release(); }
     }
 
+    public async Task<IReadOnlyList<ColorTag>> GetColorTagsAsync(CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var names = await ReadSettingsAsync(cancellationToken);
+            return ColorTag.BuiltIn.Select(color => names.TryGetValue(color.Id, out var name)
+                ? color with { Name = name }
+                : color).ToArray();
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task RenameColorAsync(string colorId, string name, CancellationToken cancellationToken = default)
+    {
+        var color = ColorTag.BuiltIn.FirstOrDefault(item => item.Id.Equals(colorId, StringComparison.OrdinalIgnoreCase))
+            ?? throw new ArgumentException($"Unknown color '{colorId}'.", nameof(colorId));
+        var cleaned = name.Trim();
+        if (cleaned.Length is < 1 or > 32) throw new ArgumentException("Color names must be between 1 and 32 characters.", nameof(name));
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var names = await ReadSettingsAsync(cancellationToken);
+            names[color.Id] = cleaned;
+            Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
+            await using var stream = File.Create(_settingsPath);
+            await JsonSerializer.SerializeAsync(stream, names, JsonOptions, cancellationToken);
+        }
+        finally { _gate.Release(); }
+    }
+
     public Task MoveMetadataAsync(string oldPath, string newPath, CancellationToken cancellationToken = default) =>
         TransferMetadataAsync(oldPath, newPath, removeSource: true, cancellationToken);
 
@@ -142,6 +178,14 @@ public sealed class JsonColorService : IColorService
         await using var stream = File.OpenRead(_databasePath);
         var stored = await JsonSerializer.DeserializeAsync<Dictionary<string, ColorMetadata>>(stream, JsonOptions, cancellationToken);
         return new Dictionary<string, ColorMetadata>(stored ?? [], PathComparer);
+    }
+
+    private async Task<Dictionary<string, string>> ReadSettingsAsync(CancellationToken cancellationToken)
+    {
+        if (!File.Exists(_settingsPath)) return new(StringComparer.OrdinalIgnoreCase);
+        await using var stream = File.OpenRead(_settingsPath);
+        var stored = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(stream, JsonOptions, cancellationToken);
+        return new(stored ?? [], StringComparer.OrdinalIgnoreCase);
     }
 
     private static StringComparer PathComparer => OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;

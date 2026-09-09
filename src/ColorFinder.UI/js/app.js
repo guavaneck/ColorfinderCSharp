@@ -1,4 +1,4 @@
-const state = { snapshot: null, selectedPaths: new Set(), anchorIndex: -1, home: null, view: 'grid', pending: new Map() };
+const state = { snapshot: null, selectedPaths: new Set(), anchorIndex: -1, home: null, view: 'grid', pending: new Map(), colorFilter: null, query: '' };
 const entriesElement = document.querySelector('#entries');
 const contextMenu = document.querySelector('#context-menu');
 const appDialog = document.querySelector('#app-dialog');
@@ -50,11 +50,13 @@ async function refresh(action, payload) {
 
 function render() {
   const { path, entries, canGoBack, canGoForward, colors } = state.snapshot;
-  renderBreadcrumbs(path);
+  state.snapshot.isSearch ? renderSearchHeading() : renderBreadcrumbs(path);
   document.querySelector('#back').disabled = !canGoBack;
   document.querySelector('#forward').disabled = !canGoForward;
   entriesElement.className = `entries ${state.view}`;
-  entriesElement.replaceChildren(...entries.map((entry, index) => {
+  const visibleEntries = entries.filter(entry => (!state.colorFilter || entry.colorId === state.colorFilter) && (!state.query || entry.name.toLocaleLowerCase().includes(state.query.toLocaleLowerCase())));
+  entriesElement.replaceChildren(...visibleEntries.map(entry => {
+    const index = entries.indexOf(entry);
     const button = document.createElement('button');
     button.className = `entry${state.selectedPaths.has(entry.fullPath) ? ' selected' : ''}`;
     button.title = entry.fullPath;
@@ -80,7 +82,7 @@ function render() {
       ? refresh('navigation.open', { path: entry.fullPath })
       : invoke('filesystem.open', { path: entry.fullPath }).catch(showError);
     return button;
-  }));
+  }), ...(visibleEntries.length ? [] : [emptyState()]));
   const colorButtons = colors.map(color => {
     const button = document.createElement('button');
     button.className = 'swatch'; button.title = color.name;
@@ -89,6 +91,31 @@ function render() {
     return button;
   });
   document.querySelector('#context-colors').replaceChildren(...colorButtons);
+  renderColorFilters(colors);
+}
+
+function emptyState() {
+  const element = document.createElement('div'); element.className = 'empty-state';
+  element.textContent = state.snapshot.entries.length ? 'No items match these filters.' : 'No items to show.';
+  return element;
+}
+
+function renderSearchHeading() {
+  const container = document.querySelector('#path');
+  const label = document.createElement('span'); label.className = 'breadcrumb'; label.textContent = state.snapshot.path;
+  container.replaceChildren(label);
+}
+
+function renderColorFilters(colors) {
+  const all = document.createElement('button'); all.className = `color-filter${state.colorFilter ? '' : ' active'}`; all.textContent = 'All items';
+  all.onclick = () => { state.colorFilter = null; render(); };
+  const buttons = colors.map(color => {
+    const button = document.createElement('button'); button.className = `color-filter${state.colorFilter === color.id ? ' active' : ''}`;
+    button.innerHTML = '<span class="color-dot"></span><span></span>'; button.firstElementChild.style.setProperty('--swatch', color.hexColor); button.lastElementChild.textContent = color.name;
+    button.onclick = () => { state.colorFilter = state.colorFilter === color.id ? null : color.id; render(); };
+    return button;
+  });
+  document.querySelector('#color-filters').replaceChildren(all, ...buttons);
 }
 
 function renderBreadcrumbs(path) {
@@ -326,6 +353,29 @@ document.querySelector('#back').onclick = () => refresh('navigation.back');
 document.querySelector('#forward').onclick = () => refresh('navigation.forward');
 document.querySelector('#up').onclick = () => refresh('navigation.up');
 document.querySelector('#home-link').onclick = () => refresh('navigation.open', { path: state.home });
+document.querySelector('#search').oninput = event => { state.query = event.target.value; render(); };
+document.querySelector('#search-colors').onclick = () => {
+  if (!state.colorFilter) { showError(new Error('Choose a color first, then search.')); return; }
+  refresh('color.search', { color:state.colorFilter, query:state.query });
+};
+const settingsDialog = document.querySelector('#settings-dialog');
+document.querySelector('#color-settings').onclick = () => {
+  const rows = state.snapshot.colors.map(color => {
+    const label = document.createElement('label'); label.className = 'settings-row';
+    label.innerHTML = '<span class="color-dot"></span><input maxlength="32" required>';
+    label.firstElementChild.style.setProperty('--swatch', color.hexColor); label.lastElementChild.value = color.name; label.lastElementChild.dataset.color = color.id;
+    return label;
+  });
+  document.querySelector('#settings-colors').replaceChildren(...rows); settingsDialog.showModal();
+};
+document.querySelector('#settings-cancel').onclick = () => settingsDialog.close();
+document.querySelector('#settings-form').onsubmit = async event => {
+  event.preventDefault();
+  try {
+    for (const input of document.querySelectorAll('#settings-colors input')) await invoke('color.rename', { color:input.dataset.color, name:input.value });
+    settingsDialog.close(); await refresh('filesystem.listDirectory', { path: state.snapshot.isSearch ? state.home : state.snapshot.path });
+  } catch (error) { showError(error); }
+};
 document.querySelector('#context-open').onclick = () => openSelected().catch(showError);
 document.querySelector('#context-clear').onclick = () => refresh('color.remove', { paths: [...state.selectedPaths] });
 document.querySelector('#context-rename').onclick = () => renameSelected().catch(showError);

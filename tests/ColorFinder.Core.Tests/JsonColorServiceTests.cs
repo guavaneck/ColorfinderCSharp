@@ -105,6 +105,29 @@ public sealed class JsonColorServiceTests : IDisposable
         await Assert.ThrowsAsync<ArgumentException>(() => service.AssignColorAsync("example.txt", "chartreuse"));
     }
 
+    [Fact]
+    public async Task CustomColorNamesPersistWithoutChangingColorIdentity()
+    {
+        var database = Path.Combine(_root, "colors.json");
+        var service = new JsonColorService(database);
+
+        await service.RenameColorAsync("blue", "Client Work");
+        var colors = await new JsonColorService(database).GetColorTagsAsync();
+
+        var blue = Assert.Single(colors, color => color.Id == "blue");
+        Assert.Equal("Client Work", blue.Name);
+        Assert.Equal("#54a0ff", blue.HexColor);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("                                 ")]
+    public async Task InvalidCustomColorNamesAreRejected(string name)
+    {
+        var service = new JsonColorService(Path.Combine(_root, "colors.json"));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.RenameColorAsync("red", name));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);
