@@ -66,6 +66,7 @@ function render() {
     const index = entries.indexOf(entry);
     const button = document.createElement('button');
     button.draggable = true;
+    button.dataset.path = entry.fullPath;
     button.className = `entry${state.selectedPaths.has(entry.fullPath) ? ' selected' : ''}`;
     button.title = entry.fullPath;
     button.innerHTML = `<span class="icon">${entry.isDirectory ? '📁' : '📄'}</span><span class="name"></span><span class="kind">${entry.isDirectory ? 'Folder' : formatSize(entry.size)}</span><span class="modified">${new Date(entry.modifiedDate).toLocaleDateString()}</span><span class="tag"></span>`;
@@ -76,7 +77,12 @@ function render() {
     tag.title = assignedColor ? `${assignedColor.name} tag${entry.assignmentType === 'automatic' ? ' (automatic)' : ''}` : '';
     button.onclick = event => { selectEntry(event, entry, index); loadSelectionPreview(); };
     button.ondragstart = event => {
-      if (!state.selectedPaths.has(entry.fullPath)) { state.selectedPaths = new Set([entry.fullPath]); state.anchorIndex = index; render(); }
+      if (!state.selectedPaths.has(entry.fullPath)) {
+        state.selectedPaths = new Set([entry.fullPath]);
+        state.anchorIndex = index;
+        syncEntrySelection();
+        loadSelectionPreview();
+      }
       const paths = [...state.selectedPaths];
       event.dataTransfer.effectAllowed = 'copyMove';
       event.dataTransfer.setData('application/x-colorfinder-paths', JSON.stringify(paths));
@@ -120,6 +126,12 @@ function render() {
 
 function fileUri(path) {
   return `file://${path.split('/').map((part, index) => index ? encodeURIComponent(part) : '').join('/')}`;
+}
+
+function syncEntrySelection() {
+  for (const element of entriesElement.querySelectorAll('.entry'))
+    element.classList.toggle('selected', state.selectedPaths.has(element.dataset.path));
+  renderInfo();
 }
 
 function renderSidebar() {
