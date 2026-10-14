@@ -10,6 +10,7 @@ let pickerSnapshot = null;
 let deletedRuleIds = [];
 let activeDraggedPaths = [];
 let emptyDragImage = null;
+let dragBadge = null;
 
 function receiveBridgeMessage(message) {
   let response;
@@ -92,9 +93,12 @@ function render() {
       event.dataTransfer.setData('text/uri-list', paths.map(fileUri).join('\r\n'));
       event.dataTransfer.setData('text/plain', paths.join('\n'));
       event.dataTransfer.setDragImage(transparentDragImage(), 0, 0);
+      showDragBadge(paths, event.clientX, event.clientY);
     };
+    button.ondrag = event => moveDragBadge(event.clientX, event.clientY);
     button.ondragend = () => {
       activeDraggedPaths = [];
+      hideDragBadge();
       for (const element of entriesElement.querySelectorAll('.drop-target')) element.classList.remove('drop-target');
     };
     if (entry.isDirectory) {
@@ -145,6 +149,31 @@ function transparentDragImage() {
   document.body.append(emptyDragImage);
   return emptyDragImage;
 }
+
+function showDragBadge(paths, x, y) {
+  if (!dragBadge) {
+    dragBadge = document.createElement('div');
+    dragBadge.className = 'drag-badge';
+    document.body.append(dragBadge);
+  }
+  const selected = selectedEntries();
+  dragBadge.textContent = paths.length === 1 ? (selected[0]?.name ?? paths[0].split(/[\\/]/).pop()) : `${paths.length} items`;
+  dragBadge.hidden = false;
+  moveDragBadge(x, y);
+}
+
+function moveDragBadge(x, y) {
+  if (!dragBadge || dragBadge.hidden || (!x && !y)) return;
+  dragBadge.style.left = `${Math.max(0, Math.min(x, window.innerWidth - dragBadge.offsetWidth - 20))}px`;
+  dragBadge.style.top = `${Math.max(0, Math.min(y, window.innerHeight - dragBadge.offsetHeight - 20))}px`;
+}
+
+function hideDragBadge() {
+  if (dragBadge) dragBadge.hidden = true;
+}
+
+document.addEventListener('dragover', event => moveDragBadge(event.clientX, event.clientY), true);
+document.addEventListener('drop', hideDragBadge, true);
 
 function syncEntrySelection() {
   for (const element of entriesElement.querySelectorAll('.entry'))
