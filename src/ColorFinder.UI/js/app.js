@@ -4,6 +4,7 @@ const contextMenu = document.querySelector('#context-menu');
 const appDialog = document.querySelector('#app-dialog');
 const dialogInput = document.querySelector('#dialog-input');
 const folderPicker = document.querySelector('#folder-picker');
+const colorFinderDragHeader = 'ColorFinder file move';
 let resolveDialog = null;
 let resolveFolderPicker = null;
 let pickerSnapshot = null;
@@ -11,6 +12,7 @@ let deletedRuleIds = [];
 let activeDraggedPaths = [];
 let emptyDragImage = null;
 let dragBadge = null;
+let suppressDragClickUntil = 0;
 
 function receiveBridgeMessage(message) {
   let response;
@@ -80,6 +82,7 @@ function render() {
     tag.title = assignedColor ? `${assignedColor.name} tag${entry.assignmentType === 'automatic' ? ' (automatic)' : ''}` : '';
     button.onclick = event => { selectEntry(event, entry, index); loadSelectionPreview(); };
     button.ondragstart = event => {
+      suppressDragClickUntil = Number.POSITIVE_INFINITY;
       if (!state.selectedPaths.has(entry.fullPath)) {
         state.selectedPaths = new Set([entry.fullPath]);
         state.anchorIndex = index;
@@ -91,13 +94,14 @@ function render() {
       event.dataTransfer.effectAllowed = 'copyMove';
       event.dataTransfer.setData('application/x-colorfinder-paths', JSON.stringify(paths));
       event.dataTransfer.setData('text/uri-list', paths.map(fileUri).join('\r\n'));
-      event.dataTransfer.setData('text/plain', paths.join('\n'));
+      event.dataTransfer.setData('text/plain', `${colorFinderDragHeader}\n${paths.join('\n')}`);
       event.dataTransfer.setDragImage(transparentDragImage(), 0, 0);
       showDragBadge(paths, event.clientX, event.clientY);
     };
     button.ondrag = event => moveDragBadge(event.clientX, event.clientY);
     button.ondragend = () => {
       activeDraggedPaths = [];
+      suppressDragClickUntil = Date.now() + 300;
       hideDragBadge();
       for (const element of entriesElement.querySelectorAll('.drop-target')) element.classList.remove('drop-target');
     };
@@ -217,7 +221,7 @@ function makeFileDropTarget(element, getDestination) {
 
 function hasFileDrag(dataTransfer) {
   const types = [...(dataTransfer?.types ?? [])];
-  return isColorFinderDrag(dataTransfer) || types.includes('Files') || types.includes('text/uri-list');
+  return isColorFinderDrag(dataTransfer) || types.includes('Files') || types.includes('text/uri-list') || types.includes('text/plain');
 }
 
 function isColorFinderDrag(dataTransfer) {
@@ -255,7 +259,7 @@ async function transferDroppedItems(event, destination) {
   try {
     const storedPaths = event.dataTransfer.getData('application/x-colorfinder-paths');
     const internalPaths = storedPaths ? JSON.parse(storedPaths) : activeDraggedPaths;
-    const isInternal = isColorFinderDrag(event.dataTransfer);
+    const isInternal = isColorFinderDrag(event.dataTransfer) || event.dataTransfer.getData('text/plain').startsWith(colorFinderDragHeader);
     const paths = (internalPaths.length ? internalPaths : externalDroppedPaths(event.dataTransfer)).filter(path => path !== destination);
     if (!paths.length) return;
     await refresh(isInternal ? 'filesystem.move' : 'filesystem.copy', { paths, destination });
@@ -270,6 +274,10 @@ function externalDroppedPaths(dataTransfer) {
       const uri = new URL(line);
       if (uri.protocol === 'file:' && (!uri.hostname || uri.hostname === 'localhost')) paths.push(decodeURIComponent(uri.pathname));
     } catch { /* Ignore malformed or non-file drag data. */ }
+  }
+  for (const line of dataTransfer.getData('text/plain').split(/\r?\n/)) {
+    const path = line.trim();
+    if (path.startsWith('/')) paths.push(path);
   }
   return [...new Set(paths)];
 }
@@ -690,6 +698,12 @@ entriesElement.oncontextmenu = event => {
 document.addEventListener('pointerdown', event => {
   if (!contextMenu.hidden && !contextMenu.contains(event.target)) closeContextMenu();
 });
+document.addEventListener('click', event => {
+  if (Date.now() >= suppressDragClickUntil) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}, true);
+
 document.addEventListener('keydown', event => {
   const modifier = event.ctrlKey || event.metaKey;
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
