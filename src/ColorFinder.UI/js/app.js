@@ -202,7 +202,7 @@ function makeFileDropTarget(element, getDestination) {
     if (!hasFileDrag(event.dataTransfer)) return;
     event.preventDefault();
     event.stopPropagation();
-    event.dataTransfer.dropEffect = activeDraggedPaths.length ? 'move' : 'copy';
+    event.dataTransfer.dropEffect = isColorFinderDrag(event.dataTransfer) ? 'move' : 'copy';
     element.classList.add('drop-target');
   };
   element.ondragleave = () => element.classList.remove('drop-target');
@@ -217,7 +217,11 @@ function makeFileDropTarget(element, getDestination) {
 
 function hasFileDrag(dataTransfer) {
   const types = [...(dataTransfer?.types ?? [])];
-  return activeDraggedPaths.length > 0 || types.includes('Files') || types.includes('text/uri-list');
+  return isColorFinderDrag(dataTransfer) || types.includes('Files') || types.includes('text/uri-list');
+}
+
+function isColorFinderDrag(dataTransfer) {
+  return activeDraggedPaths.length > 0 || [...(dataTransfer?.types ?? [])].includes('application/x-colorfinder-paths');
 }
 
 function renderInfo() {
@@ -251,8 +255,8 @@ async function transferDroppedItems(event, destination) {
   try {
     const storedPaths = event.dataTransfer.getData('application/x-colorfinder-paths');
     const internalPaths = storedPaths ? JSON.parse(storedPaths) : activeDraggedPaths;
-    const isInternal = internalPaths.length > 0;
-    const paths = (isInternal ? internalPaths : externalDroppedPaths(event.dataTransfer)).filter(path => path !== destination);
+    const isInternal = isColorFinderDrag(event.dataTransfer);
+    const paths = (internalPaths.length ? internalPaths : externalDroppedPaths(event.dataTransfer)).filter(path => path !== destination);
     if (!paths.length) return;
     await refresh(isInternal ? 'filesystem.move' : 'filesystem.copy', { paths, destination });
   } catch (error) { showError(error); }
