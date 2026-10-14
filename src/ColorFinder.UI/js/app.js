@@ -102,9 +102,7 @@ function render() {
       for (const element of entriesElement.querySelectorAll('.drop-target')) element.classList.remove('drop-target');
     };
     if (entry.isDirectory) {
-      button.ondragover = event => { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'move'; button.classList.add('drop-target'); };
-      button.ondragleave = () => button.classList.remove('drop-target');
-      button.ondrop = event => { event.preventDefault(); event.stopPropagation(); button.classList.remove('drop-target'); moveDroppedItems(event, entry.fullPath); };
+      makeMoveDropTarget(button, entry.fullPath);
     }
     button.oncontextmenu = event => {
       event.preventDefault();
@@ -192,9 +190,29 @@ function renderLocations(selector, locations, icon) {
   const buttons = locations.map(location => {
     const button = document.createElement('button'); button.className = `location-link${location.path === state.snapshot.path ? ' active' : ''}`;
     button.innerHTML = `<span>${icon}</span><span></span>`; button.lastElementChild.textContent = location.name; button.title = location.path;
-    button.onclick = () => refresh('navigation.open', { path:location.path }); return button;
+    button.onclick = () => refresh('navigation.open', { path:location.path });
+    makeMoveDropTarget(button, location.path);
+    return button;
   });
   document.querySelector(selector).replaceChildren(...buttons);
+}
+
+function makeMoveDropTarget(element, destination) {
+  element.ondragover = event => {
+    if (!activeDraggedPaths.length) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'move';
+    element.classList.add('drop-target');
+  };
+  element.ondragleave = () => element.classList.remove('drop-target');
+  element.ondrop = event => {
+    if (!activeDraggedPaths.length) return;
+    event.preventDefault();
+    event.stopPropagation();
+    element.classList.remove('drop-target');
+    moveDroppedItems(event, destination);
+  };
 }
 
 function renderInfo() {
