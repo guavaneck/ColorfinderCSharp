@@ -35,7 +35,16 @@ public sealed class PlatformService : IPlatformService
 
     private static ProcessStartInfo CreateLinuxOpenStartInfo(string path)
     {
-        var handler = ResolveHandler(path);
+        DesktopHandler? handler = null;
+        try { handler = ResolveHandler(path); }
+        catch (FileNotFoundException) { }
+        catch (InvalidOperationException) { }
+
+        if (handler is null)
+        {
+            handler = ResolveBrowserHandler();
+            if (handler is null) return CreateDesktopOpenerStartInfo(path);
+        }
 
         var command = DesktopExecParser.Parse(handler.Exec, path);
         if (command.Count == 0) throw new InvalidOperationException("The default application has no launch command.");
@@ -53,6 +62,38 @@ public sealed class PlatformService : IPlatformService
             foreach (var argument in command.Skip(1)) startInfo.ArgumentList.Add(argument);
         }
         return startInfo;
+    }
+
+    private static DesktopHandler? ResolveBrowserHandler()
+    {
+        if (FindOnPath("xdg-settings") is null) return null;
+        try
+        {
+            var desktopName = RunAndCapture("xdg-settings", "get", "default-web-browser").Trim();
+            return string.IsNullOrWhiteSpace(desktopName) ? null : ReadDesktopHandler(desktopName);
+        }
+        catch (Exception exception) when (exception is FileNotFoundException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    private static ProcessStartInfo CreateDesktopOpenerStartInfo(string path)
+    {
+        if (FindOnPath("gio") is not null)
+        {
+            var gio = new ProcessStartInfo("gio") { UseShellExecute = false };
+            gio.ArgumentList.Add("open");
+            gio.ArgumentList.Add(path);
+            return gio;
+        }
+        if (FindOnPath("xdg-open") is not null)
+        {
+            var xdgOpen = new ProcessStartInfo("xdg-open") { UseShellExecute = false };
+            xdgOpen.ArgumentList.Add(path);
+            return xdgOpen;
+        }
+        throw new InvalidOperationException("No application, browser, or desktop opener is available for this file.");
     }
 
     public Task WarmOpenHandlersAsync(IEnumerable<string> paths, CancellationToken cancellationToken = default)
@@ -91,6 +132,8 @@ public sealed class PlatformService : IPlatformService
         }
         var mimeOutput = RunAndCapture("gio", "mime", contentType);
         var desktopName = Regex.Match(mimeOutput, "Default application[^:]*:\\s*(?<name>\\S+)").Groups["name"].Value;
+        if (string.IsNullOrWhiteSpace(desktopName))
+            throw new InvalidOperationException($"No default application is configured for '{contentType}'.");
         var handler = ReadDesktopHandler(desktopName);
         lock (HandlerCacheLock) HandlerCache[contentType] = handler;
         return handler;

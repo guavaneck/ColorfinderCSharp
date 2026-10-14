@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="folder" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#78b7ff"/>
+      <stop offset="1" stop-color="#3976db"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="52" fill="#171a20"/>
+  <path d="M36 76c0-11 9-20 20-20h54l22 24h68c11 0 20 9 20 20v92c0 11-9 20-20 20H56c-11 0-20-9-20-20z" fill="url(#folder)"/>
+  <path d="M36 104h184v88c0 11-9 20-20 20H56c-11 0-20-9-20-20z" fill="#5ca0f4"/>
+  <rect x="55" y="123" width="12" height="69" rx="6" fill="#ff6259"/>
+  <rect x="79" y="123" width="12" height="69" rx="6" fill="#ffbd2e"/>
+  <rect x="103" y="123" width="12" height="69" rx="6" fill="#28c840"/>
+  <rect x="127" y="123" width="12" height="69" rx="6" fill="#9b6cff"/>
+</svg>

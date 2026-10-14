@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=ColorFinder
+Comment=Browse and organize files with persistent color tags
+Exec=ColorFinder.Desktop %U
+TryExec=ColorFinder.Desktop
+Icon=colorfinder
+Terminal=false
+Categories=System;FileTools;FileManager;
+MimeType=inode/directory;
+StartupNotify=true

@@ -77,7 +77,11 @@ function render() {
     button.onclick = event => { selectEntry(event, entry, index); loadSelectionPreview(); };
     button.ondragstart = event => {
       if (!state.selectedPaths.has(entry.fullPath)) { state.selectedPaths = new Set([entry.fullPath]); state.anchorIndex = index; render(); }
-      event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('application/x-colorfinder-paths', JSON.stringify([...state.selectedPaths]));
+      const paths = [...state.selectedPaths];
+      event.dataTransfer.effectAllowed = 'copyMove';
+      event.dataTransfer.setData('application/x-colorfinder-paths', JSON.stringify(paths));
+      event.dataTransfer.setData('text/uri-list', paths.map(fileUri).join('\r\n'));
+      event.dataTransfer.setData('text/plain', paths.join('\n'));
     };
     if (entry.isDirectory) {
       button.ondragover = event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; button.classList.add('drop-target'); };
@@ -112,6 +116,10 @@ function render() {
   renderColorFilters(colors);
   renderSidebar();
   renderInfo();
+}
+
+function fileUri(path) {
+  return `file://${path.split('/').map((part, index) => index ? encodeURIComponent(part) : '').join('/')}`;
 }
 
 function renderSidebar() {
@@ -493,11 +501,14 @@ document.querySelector('#color-settings').onclick = () => {
   document.querySelector('#rules-list').replaceChildren(...(state.snapshot.rules ?? []).map(createRuleRow));
   settingsDialog.showModal();
 };
-function createRuleRow(rule = { id:'', extension:'', colorId:'blue', enabled:true, priority:0 }) {
+function createRuleRow(rule = { id:'', extension:'', colorId:'blue', enabled:true, priority:0, type:'extension' }) {
   const row = document.createElement('div'); row.className = 'rule-row'; row.dataset.id = rule.id;
   const options = state.snapshot.colors.map(color => `<option value="${color.id}"></option>`).join('');
-  row.innerHTML = `<label class="rule-enabled-wrap" title="Enable this rule"><input class="rule-enabled" type="checkbox" aria-label="Enabled"></label><input class="rule-extension" placeholder=".pdf" required maxlength="32" aria-label="Extension"><select class="rule-color" aria-label="Color">${options}</select><input class="rule-priority" type="number" value="0" title="Higher priority wins when rules overlap" aria-label="Priority"><button class="rule-delete" type="button" title="Delete rule">×</button>`;
-  row.querySelector('.rule-enabled').checked = rule.enabled; row.querySelector('.rule-extension').value = rule.extension; row.querySelector('.rule-color').value = rule.colorId; row.querySelector('.rule-priority').value = rule.priority;
+  const types = [['extension','Extension'],['fileName','File name'],['path','Path'],['regularExpression','Regex'],['mimeType','MIME type'],['olderThanDays','Older than (days)'],['largerThanBytes','Larger than (size)']].map(([value,label]) => `<option value="${value}">${label}</option>`).join('');
+  row.innerHTML = `<label class="rule-enabled-wrap" title="Enable this rule"><input class="rule-enabled" type="checkbox" aria-label="Enabled"></label><select class="rule-type" aria-label="Match type">${types}</select><input class="rule-extension" required maxlength="256" aria-label="Condition"><select class="rule-color" aria-label="Color">${options}</select><input class="rule-priority" type="number" value="0" title="Higher priority wins when rules overlap" aria-label="Priority"><button class="rule-delete" type="button" title="Delete rule">×</button>`;
+  const condition = row.querySelector('.rule-extension'); const type = row.querySelector('.rule-type');
+  const updateHint = () => { condition.placeholder = { extension:'.pdf', fileName:'*FINAL*', path:'*/Downloads/*.zip', regularExpression:'invoice-[0-9]+', mimeType:'image/*', olderThanDays:'365', largerThanBytes:'1 GB' }[type.value]; };
+  row.querySelector('.rule-enabled').checked = rule.enabled; type.value = rule.type ?? 'extension'; condition.value = rule.extension; row.querySelector('.rule-color').value = rule.colorId; row.querySelector('.rule-priority').value = rule.priority; updateHint(); type.onchange = updateHint;
   [...row.querySelector('.rule-color').options].forEach((option, index) => { option.textContent = state.snapshot.colors[index].name; });
   row.querySelector('.rule-delete').onclick = () => {
     if (row.dataset.id) deletedRuleIds.push(row.dataset.id);
@@ -512,7 +523,7 @@ document.querySelector('#settings-form').onsubmit = async event => {
   try {
     for (const input of document.querySelectorAll('#settings-colors input')) await invoke('color.rename', { color:input.dataset.color, name:input.value });
     for (const id of deletedRuleIds) await invoke('rules.delete', { id });
-    for (const row of document.querySelectorAll('.rule-row')) await invoke('rules.save', { id:row.dataset.id, extension:row.querySelector('.rule-extension').value, color:row.querySelector('.rule-color').value, enabled:row.querySelector('.rule-enabled').checked, priority:Number(row.querySelector('.rule-priority').value) });
+    for (const row of document.querySelectorAll('.rule-row')) await invoke('rules.save', { id:row.dataset.id, type:row.querySelector('.rule-type').value, extension:row.querySelector('.rule-extension').value, color:row.querySelector('.rule-color').value, enabled:row.querySelector('.rule-enabled').checked, priority:Number(row.querySelector('.rule-priority').value) });
     settingsDialog.close(); await refresh('filesystem.listDirectory', { path: state.snapshot.isSearch ? state.home : state.snapshot.path });
   } catch (error) { showError(error); }
 };

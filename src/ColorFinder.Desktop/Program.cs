@@ -8,7 +8,10 @@ using ColorFinder.Desktop.Platform;
 using Photino.NET;
 
 var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-var bridge = new AppBridge(new FileSystemService(), JsonColorService.CreateDefault(), JsonColorRuleService.CreateDefault(), new NavigationService(home), new PlatformService());
+var initialPath = args.FirstOrDefault() is { } requestedPath && Directory.Exists(requestedPath)
+    ? Path.GetFullPath(requestedPath)
+    : home;
+var bridge = new AppBridge(new FileSystemService(), JsonColorService.CreateDefault(), JsonColorRuleService.CreateDefault(), new NavigationService(initialPath), new PlatformService());
 var indexPath = Path.Combine(AppContext.BaseDirectory, "ui", "index.html");
 
 if (!File.Exists(indexPath))

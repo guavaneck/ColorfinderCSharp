@@ -25,7 +25,7 @@ Last reviewed: 2026-09-09
 - [x] C# owns filesystem access and navigation history; the UI owns transient selection and view mode.
 - [x] Linux development uses `shell.nix` with .NET 8, GTK, and WebKitGTK.
 - [x] The initial Core behavior has automated tests.
-- [x] Complete Version 0.1 functionality on Linux.
+- [x] Complete Version 0.8 functionality on Linux.
 - [ ] Verify and package the application on macOS.
 
 Checked items below represent implemented and verified behavior, not merely planned behavior.
@@ -1489,32 +1489,40 @@ Files > 1 GB             Red
 
 Allow rule precedence and manual overrides.
 
+- [x] Extension matching
+- [x] Filename glob matching
+- [x] Full-path glob matching
+- [x] Regular-expression matching
+- [x] File-age matching
+- [x] File-size matching
+- [x] Rule precedence and manual overrides
+- [x] MIME-type matching
+
 ---
 
 # 41. Version 0.9 — Platform Integration
 
 Linux:
 
-```text
-Wayland testing
-X11 testing
-Trash integration
-Open-with support
-Desktop file
-Application icons
-Common distro testing
-```
+- [ ] Wayland testing
+- [ ] X11 testing
+- [x] Trash integration
+- [ ] Open-with support
+- [x] Desktop file
+- [x] Application icon
+- [x] Drag files from ColorFinder to applications that accept file URIs
+- [ ] Drag files from the desktop or other applications into ColorFinder
+- [ ] Common distro testing
 
 macOS:
 
-```text
-.app bundle
-Trash integration
-Open-with
-Finder reveal
-macOS keyboard behavior
-Application menus
-```
+- [ ] `.app` bundle
+- [x] Trash integration
+- [ ] Open-with
+- [ ] Finder reveal
+- [ ] Drag files between ColorFinder and other applications
+- [ ] macOS keyboard behavior
+- [ ] Application menus
 
 ---
 

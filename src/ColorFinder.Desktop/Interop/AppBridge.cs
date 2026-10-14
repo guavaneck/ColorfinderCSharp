@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using ColorFinder.Core.Colors;
 using ColorFinder.Core.FileSystem;
 using ColorFinder.Core.Navigation;
@@ -9,7 +10,14 @@ namespace ColorFinder.Desktop.Interop;
 
 public sealed class AppBridge(IFileSystemService fileSystem, IColorService colors, IColorRuleService rules, NavigationService navigation, IPlatformService platform)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
+
+    private static JsonSerializerOptions CreateJsonOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+        return options;
+    }
 
     public async Task<string> HandleAsync(string message)
     {
@@ -64,13 +72,17 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
     {
         var entries = await fileSystem.ListDirectoryAsync(path);
         var assignments = await colors.GetColorsAsync(entries.Select(entry => entry.FullPath));
-        var activeRules = (await rules.GetRulesAsync()).Where(rule => rule.Enabled).ToArray();
-        var rendered = entries.Select(entry => new
+        var rendered = new List<object>(entries.Count);
+        foreach (var entry in entries)
         {
-            entry.Name, entry.FullPath, entry.Extension, entry.Size, entry.ModifiedDate, entry.IsDirectory,
-            ColorId = assignments.GetValueOrDefault(entry.FullPath)?.ColorId ?? activeRules.FirstOrDefault(rule => rule.Extension.Equals(entry.Extension, StringComparison.OrdinalIgnoreCase))?.ColorId,
-            AssignmentType = assignments.ContainsKey(entry.FullPath) ? "manual" : activeRules.Any(rule => rule.Extension.Equals(entry.Extension, StringComparison.OrdinalIgnoreCase)) ? "automatic" : null
-        }).ToArray();
+            var automaticRule = assignments.ContainsKey(entry.FullPath) ? null : await rules.MatchAsync(entry);
+            rendered.Add(new
+            {
+                entry.Name, entry.FullPath, entry.Extension, entry.Size, entry.ModifiedDate, entry.IsDirectory,
+                ColorId = assignments.GetValueOrDefault(entry.FullPath)?.ColorId ?? automaticRule?.ColorId,
+                AssignmentType = assignments.ContainsKey(entry.FullPath) ? "manual" : automaticRule is not null ? "automatic" : null
+            });
+        }
         return new { path, navigation.CanGoBack, navigation.CanGoForward, Entries = rendered, Colors = await colors.GetColorTagsAsync(), Rules = await rules.GetRulesAsync(), Locations = SidebarLocations() };
     }
 
@@ -110,8 +122,10 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
 
     private async Task<object> SaveRuleAsync(BridgeRequest request)
     {
+        var typeName = OptionalString(request, "type") ?? nameof(ColorRuleType.Extension);
+        if (!Enum.TryParse<ColorRuleType>(typeName, true, out var type)) throw new ArgumentException($"Unknown rule type '{typeName}'.");
         var rule = new ColorRule(OptionalString(request, "id") ?? string.Empty, RequiredString(request, "extension"),
-            RequiredString(request, "color"), OptionalBool(request, "enabled", true), OptionalInt(request, "priority"));
+            RequiredString(request, "color"), OptionalBool(request, "enabled", true), OptionalInt(request, "priority"), type);
         await rules.SaveRuleAsync(rule);
         return await DirectorySnapshotAsync(navigation.CurrentPath);
     }

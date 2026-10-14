@@ -19,3 +19,13 @@ dotnet run --project src/ColorFinder.Desktop
 ```
 
 ColorFinder uses WKWebView on macOS, so the GStreamer dependency is Linux-specific.
+
+## Linux desktop integration
+
+Version 0.9 desktop-integration assets are in `packaging/linux`. When packaging or installing ColorFinder:
+
+- Install `colorfinder.desktop` in `$XDG_DATA_HOME/applications` or `/usr/share/applications`.
+- Install `colorfinder.svg` in the `hicolor/scalable/apps` icon directory.
+- Ensure the published `ColorFinder.Desktop` executable is available on `PATH`.
+
+The desktop entry can launch ColorFinder at a directory supplied by the desktop environment.
