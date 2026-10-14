@@ -8,6 +8,8 @@ let resolveDialog = null;
 let resolveFolderPicker = null;
 let pickerSnapshot = null;
 let deletedRuleIds = [];
+let activeDraggedPaths = [];
+let emptyDragImage = null;
 
 function receiveBridgeMessage(message) {
   let response;
@@ -84,15 +86,21 @@ function render() {
         loadSelectionPreview();
       }
       const paths = [...state.selectedPaths];
+      activeDraggedPaths = paths;
       event.dataTransfer.effectAllowed = 'copyMove';
       event.dataTransfer.setData('application/x-colorfinder-paths', JSON.stringify(paths));
       event.dataTransfer.setData('text/uri-list', paths.map(fileUri).join('\r\n'));
       event.dataTransfer.setData('text/plain', paths.join('\n'));
+      event.dataTransfer.setDragImage(transparentDragImage(), 0, 0);
+    };
+    button.ondragend = () => {
+      activeDraggedPaths = [];
+      for (const element of entriesElement.querySelectorAll('.drop-target')) element.classList.remove('drop-target');
     };
     if (entry.isDirectory) {
-      button.ondragover = event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; button.classList.add('drop-target'); };
+      button.ondragover = event => { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'move'; button.classList.add('drop-target'); };
       button.ondragleave = () => button.classList.remove('drop-target');
-      button.ondrop = event => { event.preventDefault(); button.classList.remove('drop-target'); moveDroppedItems(event, entry.fullPath); };
+      button.ondrop = event => { event.preventDefault(); event.stopPropagation(); button.classList.remove('drop-target'); moveDroppedItems(event, entry.fullPath); };
     }
     button.oncontextmenu = event => {
       event.preventDefault();
@@ -126,6 +134,16 @@ function render() {
 
 function fileUri(path) {
   return `file://${path.split('/').map((part, index) => index ? encodeURIComponent(part) : '').join('/')}`;
+}
+
+function transparentDragImage() {
+  if (emptyDragImage) return emptyDragImage;
+  emptyDragImage = document.createElement('canvas');
+  emptyDragImage.width = 1;
+  emptyDragImage.height = 1;
+  emptyDragImage.style.cssText = 'position:fixed;left:-2px;top:-2px;opacity:0;pointer-events:none';
+  document.body.append(emptyDragImage);
+  return emptyDragImage;
 }
 
 function syncEntrySelection() {
@@ -179,7 +197,8 @@ async function loadSelectionPreview() {
 
 async function moveDroppedItems(event, destination) {
   try {
-    const paths = JSON.parse(event.dataTransfer.getData('application/x-colorfinder-paths') || '[]').filter(path => path !== destination);
+    const storedPaths = event.dataTransfer.getData('application/x-colorfinder-paths');
+    const paths = (storedPaths ? JSON.parse(storedPaths) : activeDraggedPaths).filter(path => path !== destination);
     if (!paths.length) return;
     await refresh('filesystem.move', { paths, destination });
   } catch (error) { showError(error); }
