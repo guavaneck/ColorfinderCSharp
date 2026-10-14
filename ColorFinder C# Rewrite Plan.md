@@ -1511,7 +1511,7 @@ Linux:
 - [x] Desktop file
 - [x] Application icon
 - [x] Drag files from ColorFinder to applications that accept file URIs
-- [ ] Drag files from the desktop or other applications into ColorFinder
+- [x] Drag files from the desktop or other applications into ColorFinder
 - [ ] Common distro testing
 
 macOS:

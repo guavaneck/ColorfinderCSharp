@@ -102,7 +102,7 @@ function render() {
       for (const element of entriesElement.querySelectorAll('.drop-target')) element.classList.remove('drop-target');
     };
     if (entry.isDirectory) {
-      makeMoveDropTarget(button, entry.fullPath);
+      makeFileDropTarget(button, () => entry.fullPath);
     }
     button.oncontextmenu = event => {
       event.preventDefault();
@@ -191,28 +191,33 @@ function renderLocations(selector, locations, icon) {
     const button = document.createElement('button'); button.className = `location-link${location.path === state.snapshot.path ? ' active' : ''}`;
     button.innerHTML = `<span>${icon}</span><span></span>`; button.lastElementChild.textContent = location.name; button.title = location.path;
     button.onclick = () => refresh('navigation.open', { path:location.path });
-    makeMoveDropTarget(button, location.path);
+    makeFileDropTarget(button, () => location.path);
     return button;
   });
   document.querySelector(selector).replaceChildren(...buttons);
 }
 
-function makeMoveDropTarget(element, destination) {
+function makeFileDropTarget(element, getDestination) {
   element.ondragover = event => {
-    if (!activeDraggedPaths.length) return;
+    if (!hasFileDrag(event.dataTransfer)) return;
     event.preventDefault();
     event.stopPropagation();
-    event.dataTransfer.dropEffect = 'move';
+    event.dataTransfer.dropEffect = activeDraggedPaths.length ? 'move' : 'copy';
     element.classList.add('drop-target');
   };
   element.ondragleave = () => element.classList.remove('drop-target');
   element.ondrop = event => {
-    if (!activeDraggedPaths.length) return;
+    if (!hasFileDrag(event.dataTransfer)) return;
     event.preventDefault();
     event.stopPropagation();
     element.classList.remove('drop-target');
-    moveDroppedItems(event, destination);
+    transferDroppedItems(event, getDestination());
   };
+}
+
+function hasFileDrag(dataTransfer) {
+  const types = [...(dataTransfer?.types ?? [])];
+  return activeDraggedPaths.length > 0 || types.includes('Files') || types.includes('text/uri-list');
 }
 
 function renderInfo() {
@@ -242,13 +247,27 @@ async function loadSelectionPreview() {
   catch (error) { showError(error); }
 }
 
-async function moveDroppedItems(event, destination) {
+async function transferDroppedItems(event, destination) {
   try {
     const storedPaths = event.dataTransfer.getData('application/x-colorfinder-paths');
-    const paths = (storedPaths ? JSON.parse(storedPaths) : activeDraggedPaths).filter(path => path !== destination);
+    const internalPaths = storedPaths ? JSON.parse(storedPaths) : activeDraggedPaths;
+    const isInternal = internalPaths.length > 0;
+    const paths = (isInternal ? internalPaths : externalDroppedPaths(event.dataTransfer)).filter(path => path !== destination);
     if (!paths.length) return;
-    await refresh('filesystem.move', { paths, destination });
+    await refresh(isInternal ? 'filesystem.move' : 'filesystem.copy', { paths, destination });
   } catch (error) { showError(error); }
+}
+
+function externalDroppedPaths(dataTransfer) {
+  const paths = [...(dataTransfer.files ?? [])].map(file => file.path).filter(Boolean);
+  for (const line of dataTransfer.getData('text/uri-list').split(/\r?\n/)) {
+    if (!line || line.startsWith('#')) continue;
+    try {
+      const uri = new URL(line);
+      if (uri.protocol === 'file:' && (!uri.hostname || uri.hostname === 'localhost')) paths.push(decodeURIComponent(uri.pathname));
+    } catch { /* Ignore malformed or non-file drag data. */ }
+  }
+  return [...new Set(paths)];
 }
 
 function parseSearch(value, colors) {
@@ -689,4 +708,5 @@ for (const view of ['grid', 'list']) document.querySelector(`#${view}-view`).onc
   render();
 };
 
+makeFileDropTarget(entriesElement, () => state.snapshot.path);
 refresh('app.initialize');
