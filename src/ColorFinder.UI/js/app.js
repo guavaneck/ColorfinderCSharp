@@ -362,6 +362,8 @@ function showContextMenu(x, y, emptySpace) {
   document.querySelector('#context-item-options').hidden = emptySpace;
   document.querySelector('#context-new-folder').hidden = !emptySpace;
   document.querySelector('#context-open').disabled = count !== 1;
+  document.querySelector('#context-open-with').hidden = emptySpace;
+  document.querySelector('#context-open-with').disabled = count !== 1 || selectedEntries()[0]?.isDirectory;
   document.querySelector('#context-rename').disabled = count !== 1;
   document.querySelector('#context-duplicate').disabled = count !== 1;
   contextMenu.hidden = false;
@@ -527,6 +529,23 @@ async function openSelected() {
   closeContextMenu();
 }
 
+async function openWithSelected() {
+  const entry = selectedEntries()[0];
+  if (!entry || entry.isDirectory) return;
+  closeContextMenu();
+  const applications = await invoke('filesystem.applications', { path:entry.fullPath });
+  if (!applications.length) throw new Error('No applications are registered for this file type.');
+  const dialog = document.querySelector('#open-with-dialog');
+  const buttons = applications.map(application => {
+    const button = document.createElement('button');
+    button.type = 'button'; button.textContent = application.name;
+    button.onclick = async () => { dialog.close(); await invoke('filesystem.openWith', { path:entry.fullPath, application:application.id }); };
+    return button;
+  });
+  document.querySelector('#application-list').replaceChildren(...buttons);
+  dialog.showModal();
+}
+
 function formatSize(bytes) {
   if (bytes == null) return '';
   if (bytes < 1024) return `${bytes} B`;
@@ -625,6 +644,7 @@ document.querySelector('#settings-form').onsubmit = async event => {
   } catch (error) { showError(error); }
 };
 document.querySelector('#context-open').onclick = () => openSelected().catch(showError);
+document.querySelector('#context-open-with').onclick = () => openWithSelected().catch(showError);
 document.querySelector('#context-clear').onclick = () => refresh('color.remove', { paths: [...state.selectedPaths] }, { preserveSelection:true });
 document.querySelector('#context-rename').onclick = () => renameSelected().catch(showError);
 document.querySelector('#context-duplicate').onclick = () => duplicateSelected().catch(showError);

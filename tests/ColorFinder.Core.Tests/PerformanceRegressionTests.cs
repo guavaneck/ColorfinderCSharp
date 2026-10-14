@@ -56,6 +56,8 @@ public sealed class PerformanceRegressionTests : IDisposable
     private sealed class NoOpPlatformService : IPlatformService
     {
         public void Open(string path) { }
+        public IReadOnlyList<ApplicationHandler> GetApplications(string path) => [];
+        public void OpenWith(string path, string applicationId) { }
         public Task WarmOpenHandlersAsync(IEnumerable<string> paths, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task MoveToTrashAsync(string path, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }

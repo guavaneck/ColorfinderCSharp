@@ -75,6 +75,7 @@
     .picker-path { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#b2b8c5; }
     .picker-folders { height:280px; overflow:auto; padding:6px; border:1px solid #3a404d; border-radius:8px; background:#12151a; }
     .picker-folder { display:flex; width:100%; gap:9px; text-align:left; background:transparent; }
+    .application-list { display:flex; flex-direction:column; gap:6px; max-height:320px; overflow:auto; }.application-list button { text-align:left; }
     .picker-empty { padding:18px; color:#9299a8; text-align:center; }
     .swatch { width:30px; height:30px; padding:0; border-radius:50%; background:var(--swatch); border:2px solid rgba(255,255,255,.18); }
     .swatch:hover { transform:scale(1.1); background:var(--swatch)!important; }
@@ -114,6 +115,7 @@
   </main>
   <div id="context-menu" class="context-menu" role="menu" hidden>
     <button id="context-open" role="menuitem">Open</button>
+    <button id="context-open-with" role="menuitem">Open With…</button>
     <button id="context-rename" role="menuitem">Rename</button>
     <button id="context-duplicate" role="menuitem">Duplicate</button>
     <button id="context-copy" role="menuitem">Copy To…</button>
@@ -137,6 +139,14 @@
         <button id="dialog-cancel" type="button">Cancel</button>
         <button id="dialog-confirm" class="dialog-confirm" type="submit">OK</button>
       </div>
+    </form>
+  </dialog>
+  <dialog id="open-with-dialog" class="app-dialog">
+    <form class="dialog-form" method="dialog">
+      <h2>Open With</h2>
+      <p>Choose an application.</p>
+      <div id="application-list" class="application-list"></div>
+      <div class="dialog-actions"><button value="cancel">Cancel</button></div>
     </form>
   </dialog>
   <dialog id="settings-dialog" class="app-dialog">

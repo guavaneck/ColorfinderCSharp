@@ -50,6 +50,8 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
         "navigation.forward" => await DirectorySnapshotAsync(navigation.Forward()),
         "navigation.up" => await DirectorySnapshotAsync(navigation.Up()),
         "filesystem.open" => OpenFile(request),
+        "filesystem.applications" => platform.GetApplications(RequiredString(request, "path")),
+        "filesystem.openWith" => OpenFileWith(request),
         "filesystem.preview" => await PreviewAsync(request),
         "filesystem.createDirectory" => await CreateDirectoryAsync(request),
         "filesystem.rename" => await RenameAsync(request),
@@ -157,6 +159,12 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
     private object OpenFile(BridgeRequest request)
     {
         platform.Open(RequiredString(request, "path"));
+        return new { opened = true };
+    }
+
+    private object OpenFileWith(BridgeRequest request)
+    {
+        platform.OpenWith(RequiredString(request, "path"), RequiredString(request, "application"));
         return new { opened = true };
     }
 

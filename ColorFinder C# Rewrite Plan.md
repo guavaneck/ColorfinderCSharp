@@ -1507,7 +1507,7 @@ Linux:
 - [ ] Wayland testing
 - [ ] X11 testing
 - [x] Trash integration
-- [ ] Open-with support
+- [x] Open-with support
 - [x] Desktop file
 - [x] Application icon
 - [x] Drag files from ColorFinder to applications that accept file URIs
