@@ -1,0 +1,40 @@
+/* ColorFinder terminal skin. Copy to ~/.config/colorfinder/ui/theme.css. */
+:root {
+  color-scheme: dark;
+  --bg: #050805;
+  --surface: #071007;
+  --surface2: #0b160b;
+  --text: #a8ff9e;
+  --muted: #5f9f5a;
+  --accent: #41ff58;
+  --border: #17451b;
+  --sidebar-width: 190px;
+}
+
+* { border-radius: 0 !important; box-shadow: none !important; }
+body { background: var(--bg) !important; font: 13px/1.35 "JetBrains Mono", "Iosevka", monospace !important; }
+button, input, select, dialog { font-family: inherit !important; }
+button { background: transparent !important; border: 1px solid transparent !important; }
+button:hover:not(:disabled), button.active { border-color: var(--border) !important; background: #0b180c !important; }
+[data-ui="toolbar"] { height: 46px; padding: 6px 10px; gap: 8px; border-color: var(--border); background: var(--surface); }
+[data-ui="layout"] { height: calc(100% - 46px); grid-template-columns: var(--sidebar-width) minmax(0,1fr) 250px; }
+[data-ui="sidebar"], [data-ui="info-panel"] { background: var(--surface); border-color: var(--border); }
+.breadcrumbs, .search-box, .dialog-form input, .rule-row input, .rule-row select { border-color: var(--border) !important; background: #020502 !important; }
+.breadcrumb + .breadcrumb::before { content: "/"; color: #41ff58; }
+.entries.grid { grid-template-columns: repeat(auto-fill,minmax(150px,1fr)); gap: 2px; padding: 10px; }
+[data-ui="entry"] { display:grid; grid-template-columns:42px minmax(0,1fr); align-items:center; gap:7px; padding:7px 8px; text-align:left; border:1px solid transparent !important; }
+[data-ui="entry"] .icon { margin:0; font-size:0; filter:none; }
+[data-ui="entry"] .icon::before { font-size:11px; font-weight:700; }
+[data-ui="entry"][data-kind="directory"] .icon::before { content:"[DIR]"; color:var(--accent); }
+[data-ui="entry"][data-kind="file"] .icon::before { content:"[FILE]"; color:var(--muted); }
+[data-ui="entry"].selected { border-color:var(--accent) !important; background:var(--surface2) !important; }
+.tag { top:5px; bottom:5px; left:1px; width:2px; }
+.location-link.active, .color-filter.active { border-left:2px solid #41ff58 !important; background:#091409 !important; }
+.location-link > span:first-child { font-size:0; }
+.location-link > span:first-child::before { content:">"; color:var(--accent); font-size:12px; font-weight:700; }
+.preview-icon { font-size:0; }
+.preview-icon::before { content:"[PREVIEW]"; color:var(--muted); font-size:12px; }
+.preview { min-height:120px; background:#020502; border:1px solid var(--border); }
+.context-menu, .app-dialog { border-color:var(--border); background:var(--surface); }
+#error { border:1px solid #ff5f57; background:#210707; color:#ffaaa5; }
+.drag-badge { border-color:var(--accent); background:var(--surface); color:var(--text); }

@@ -7,14 +7,17 @@ public sealed class JsonColorService : IColorService
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private readonly string _databasePath;
     private readonly string _settingsPath;
+    private readonly string _tagColorsPath;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Dictionary<string, ColorMetadata>? _dataIndex;
     private Dictionary<string, string>? _settingsIndex;
+    private Dictionary<string, string>? _tagColorsIndex;
 
     public JsonColorService(string databasePath)
     {
         _databasePath = Path.GetFullPath(databasePath);
         _settingsPath = Path.Combine(Path.GetDirectoryName(_databasePath)!, "settings.json");
+        _tagColorsPath = Path.Combine(Path.GetDirectoryName(_databasePath)!, "tag-colors.json");
     }
 
     public static JsonColorService CreateDefault()
@@ -99,27 +102,41 @@ public sealed class JsonColorService : IColorService
         try
         {
             var names = await GetSettingsIndexAsync(cancellationToken);
-            return ColorTag.BuiltIn.Select(color => names.TryGetValue(color.Id, out var name)
-                ? color with { Name = name }
-                : color).ToArray();
+            var hexColors = await GetTagColorsIndexAsync(cancellationToken);
+            return ColorTag.BuiltIn.Select(color => color with
+            {
+                Name = names.GetValueOrDefault(color.Id, color.Name),
+                HexColor = hexColors.GetValueOrDefault(color.Id, color.HexColor)
+            }).ToArray();
         }
         finally { _gate.Release(); }
     }
 
     public async Task RenameColorAsync(string colorId, string name, CancellationToken cancellationToken = default)
     {
+        var current = (await GetColorTagsAsync(cancellationToken)).First(color => color.Id.Equals(colorId, StringComparison.OrdinalIgnoreCase));
+        await CustomizeColorAsync(colorId, name, current.HexColor, cancellationToken);
+    }
+
+    public async Task CustomizeColorAsync(string colorId, string name, string hexColor, CancellationToken cancellationToken = default)
+    {
         var color = ColorTag.BuiltIn.FirstOrDefault(item => item.Id.Equals(colorId, StringComparison.OrdinalIgnoreCase))
             ?? throw new ArgumentException($"Unknown color '{colorId}'.", nameof(colorId));
         var cleaned = name.Trim();
         if (cleaned.Length is < 1 or > 32) throw new ArgumentException("Color names must be between 1 and 32 characters.", nameof(name));
+        var cleanedHex = hexColor.Trim().ToLowerInvariant();
+        if (cleanedHex.Length != 7 || cleanedHex[0] != '#' || cleanedHex[1..].Any(character => !Uri.IsHexDigit(character)))
+            throw new ArgumentException("Tag colors must use six-digit hex notation, such as #54a0ff.", nameof(hexColor));
         await _gate.WaitAsync(cancellationToken);
         try
         {
             var names = await GetSettingsIndexAsync(cancellationToken);
+            var hexColors = await GetTagColorsIndexAsync(cancellationToken);
             names[color.Id] = cleaned;
+            hexColors[color.Id] = cleanedHex;
             Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
-            await using var stream = File.Create(_settingsPath);
-            await JsonSerializer.SerializeAsync(stream, names, JsonOptions, cancellationToken);
+            await WriteIndexAsync(_settingsPath, names, cancellationToken);
+            await WriteIndexAsync(_tagColorsPath, hexColors, cancellationToken);
         }
         finally { _gate.Release(); }
     }
@@ -190,6 +207,23 @@ public sealed class JsonColorService : IColorService
         await using var stream = File.OpenRead(_settingsPath);
         var stored = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(stream, JsonOptions, cancellationToken);
         return _settingsIndex = new(stored ?? [], StringComparer.OrdinalIgnoreCase);
+    }
+
+    private async Task<Dictionary<string, string>> GetTagColorsIndexAsync(CancellationToken cancellationToken)
+    {
+        if (_tagColorsIndex is not null) return _tagColorsIndex;
+        if (!File.Exists(_tagColorsPath)) return _tagColorsIndex = new(StringComparer.OrdinalIgnoreCase);
+        await using var stream = File.OpenRead(_tagColorsPath);
+        var stored = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(stream, JsonOptions, cancellationToken);
+        return _tagColorsIndex = new(stored ?? [], StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static async Task WriteIndexAsync(string path, Dictionary<string, string> index, CancellationToken cancellationToken)
+    {
+        var temporaryPath = path + ".tmp";
+        await using (var stream = File.Create(temporaryPath))
+            await JsonSerializer.SerializeAsync(stream, index, JsonOptions, cancellationToken);
+        File.Move(temporaryPath, path, true);
     }
 
     private static StringComparer PathComparer => OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;

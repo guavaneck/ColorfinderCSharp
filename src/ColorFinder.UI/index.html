@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>ColorFinder</title>
   <style>
-    :root { color-scheme:dark; --bg:#111318; --surface:#1a1d24; --surface2:#232730; --text:#eef1f6; --muted:#9299a8; --accent:#74a2ff; --sidebar-width:210px; }
+    :root { color-scheme:dark; --bg:#111318; --surface:#1a1d24; --surface2:#232730; --text:#eef1f6; --muted:#9299a8; --accent:#74a2ff; --border:#303541; --sidebar-width:210px; }
     * { box-sizing:border-box; }
     html, body { width:100%; height:100%; }
     body { margin:0; overflow:hidden; background:#111318; background:var(--bg); color:#eef1f6; color:var(--text); font:14px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif; }
@@ -81,7 +81,8 @@
     .swatch:hover { transform:scale(1.1); background:var(--swatch)!important; }
     .context-colors .swatch.active { outline:2px solid white; outline-offset:2px; }
     .empty-state { grid-column:1/-1; padding:48px 20px; color:var(--muted); text-align:center; }
-    .settings-colors { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }.settings-row { display:grid; grid-template-columns:18px 1fr; align-items:center; gap:10px; }.settings-row input { margin:0; }
+    .settings-colors { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }.settings-row { display:grid; grid-template-columns:18px 42px 1fr; align-items:center; gap:10px; }.settings-row input { margin:0; }.settings-row input[type=color] { width:42px; height:32px; padding:2px; }
+    .ui-palette { display:grid; grid-template-columns:repeat(3,minmax(130px,1fr)); gap:8px 12px; margin:8px 0 18px; }.ui-color-setting { display:grid; grid-template-columns:42px 1fr; align-items:center; gap:8px; }.ui-color-setting input { width:42px!important; height:32px; margin:0!important; padding:2px!important; }.ui-color-setting span { font-size:12px; }
     #settings-dialog { width:min(860px,calc(100vw - 32px)); }.rules-heading { display:flex; align-items:center; justify-content:space-between; margin-top:20px; }.rules-heading h3 { margin:0; }.rules-list { display:flex; flex-direction:column; gap:7px; margin:6px 0 18px; }.rule-columns,.rule-row { display:grid; grid-template-columns:58px minmax(120px,1fr) minmax(140px,1.2fr) minmax(100px,1fr) 88px 32px; gap:8px; align-items:center; }.rule-columns { margin-top:10px; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.04em; }.rule-columns span:first-child { text-align:center; }.rule-row input,.rule-row select { min-width:0; margin:0; padding:7px; border:1px solid #454d5c; border-radius:7px; background:#12151a; color:inherit; }.rule-enabled-wrap { display:flex; justify-content:center; }.rule-row input[type=checkbox] { width:16px; margin:0; }.rule-delete { padding:7px; color:#ff7770; }
     .dialog-form .rule-help { margin:5px 0 0; font-size:12px; }
     #error { position:absolute; z-index:15; top:12px; right:12px; left:12px; margin:0; padding:12px; border-radius:8px; background:#5b2525; box-shadow:0 8px 24px rgba(0,0,0,.35); }
@@ -90,8 +91,8 @@
     @media (max-width:700px) { main,body.sidebar-collapsed main { grid-template-columns:54px minmax(0,1fr); } aside { padding-inline:7px; } aside h2 { visibility:hidden; }.location-link span:last-child,#color-settings .sidebar-label,.color-filter > span:last-child { display:none; }.sidebar-heading { justify-content:center; }.sidebar-heading h2 { position:absolute; }.sidebar-resizer { display:none; }.location-link,.color-filter { justify-content:center; padding-inline:5px; }.color-actions { display:block; } #color-settings { width:100%; font-size:0; } #color-settings::after { content:'⚙'; font-size:15px; }.view-toggle { display:none; } }
   </style>
 </head>
-<body>
-  <header class="toolbar">
+<body data-ui="app">
+  <header class="toolbar" data-ui="toolbar">
     <nav class="navigation-controls" aria-label="Directory navigation">
       <button id="back" title="Back">‹</button><button id="forward" title="Forward">›</button><button id="up" title="Up">↑</button>
     </nav>
@@ -100,18 +101,18 @@
     <button id="new-folder" title="New Folder">＋</button>
     <div class="view-toggle"><button id="grid-view" class="active">Grid</button><button id="list-view">List</button></div>
   </header>
-  <main>
-    <aside id="sidebar">
+  <main data-ui="layout">
+    <aside id="sidebar" data-ui="sidebar">
       <div id="sidebar-resizer" class="sidebar-resizer" aria-hidden="true"></div>
       <section class="sidebar-section"><div class="sidebar-heading"><h2>Favorites</h2><button id="toggle-sidebar" class="sidebar-toggle" title="Collapse Sidebar" aria-label="Collapse Sidebar">‹</button></div><div id="favorite-locations"></div></section>
       <section id="volumes-section" class="sidebar-section"><h2>Locations</h2><div id="volume-locations"></div></section>
       <section class="sidebar-section"><h2>Colors</h2><div id="color-filters" class="color-filters"></div><div class="color-actions"><button id="color-settings"><span class="sidebar-label">Settings</span></button></div></section>
     </aside>
-    <section class="browser">
+    <section class="browser" data-ui="browser">
       <div id="error" role="alert" hidden></div>
       <div id="entries" class="entries grid" aria-live="polite"></div>
     </section>
-    <section id="info-panel" class="info-panel" aria-label="File information"><div id="preview" class="preview"><span class="preview-icon">⌁</span></div><h2 id="info-name">Select an item</h2><dl id="info-list" class="info-list"></dl></section>
+    <section id="info-panel" class="info-panel" data-ui="info-panel" aria-label="File information"><div id="preview" class="preview"><span class="preview-icon">⌁</span></div><h2 id="info-name">Select an item</h2><dl id="info-list" class="info-list"></dl></section>
   </main>
   <div id="context-menu" class="context-menu" role="menu" hidden>
     <button id="context-open" role="menuitem">Open</button>
@@ -152,7 +153,12 @@
   <dialog id="settings-dialog" class="app-dialog">
     <form id="settings-form" class="dialog-form">
       <h2>Color Settings</h2>
-      <p>Choose the names shown for your color tags.</p>
+      <h3>Interface colors</h3>
+      <p>Customize the active skin. These choices are saved in the UI configuration folder.</p>
+      <div id="ui-palette" class="ui-palette" data-ui="ui-palette"></div>
+      <button id="reset-ui-palette" type="button">Use Skin Defaults</button>
+      <h3>File tag colors</h3>
+      <p>Choose the names and colors shown for file tags.</p>
       <div id="settings-colors" class="settings-colors"></div>
       <div class="rules-heading"><h3>Automatic color rules</h3><button id="add-rule" type="button">Add Rule</button></div>
       <p class="rule-help">If more than one rule matches, the rule with the highest priority wins.</p>

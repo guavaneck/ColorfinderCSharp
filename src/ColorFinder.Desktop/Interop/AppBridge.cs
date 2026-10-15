@@ -11,6 +11,7 @@ namespace ColorFinder.Desktop.Interop;
 public sealed class AppBridge(IFileSystemService fileSystem, IColorService colors, IColorRuleService rules, NavigationService navigation, IPlatformService platform)
 {
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
+    private static readonly HashSet<string> UiPaletteKeys = ["bg", "surface", "surface2", "text", "muted", "accent", "border"];
     private static readonly string DragHandoffPath = Path.Combine(Path.GetTempPath(), $"colorfinder-drag-{Environment.UserName}.json");
 
     private static JsonSerializerOptions CreateJsonOptions()
@@ -45,6 +46,9 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
     private async Task<object?> DispatchAsync(BridgeRequest request) => request.Action switch
     {
         "app.initialize" => await DirectorySnapshotAsync(navigation.CurrentPath),
+        "ui.customization" => await LoadCustomizationAsync(),
+        "ui.savePalette" => await SaveUiPaletteAsync(request),
+        "ui.resetPalette" => await ResetUiPaletteAsync(),
         "filesystem.listDirectory" => await DirectorySnapshotAsync(RequiredString(request, "path")),
         "navigation.open" => await DirectorySnapshotAsync(navigation.NavigateTo(RequiredString(request, "path"))),
         "navigation.back" => await DirectorySnapshotAsync(navigation.Back()),
@@ -67,6 +71,7 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
         "color.remove" => await RemoveColorAsync(request),
         "color.list" => await colors.GetColorTagsAsync(),
         "color.rename" => await RenameColorAsync(request),
+        "color.customize" => await CustomizeColorAsync(request),
         "rules.list" => await rules.GetRulesAsync(),
         "rules.save" => await SaveRuleAsync(request),
         "rules.delete" => await DeleteRuleAsync(request),
@@ -146,6 +151,65 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
         await colors.RenameColorAsync(RequiredString(request, "color"), RequiredString(request, "name"));
         return await DirectorySnapshotAsync(navigation.CurrentPath);
     }
+
+    private async Task<object> CustomizeColorAsync(BridgeRequest request)
+    {
+        await colors.CustomizeColorAsync(RequiredString(request, "color"), RequiredString(request, "name"), RequiredString(request, "hexColor"));
+        return await DirectorySnapshotAsync(navigation.CurrentPath);
+    }
+
+    private static async Task<object> LoadCustomizationAsync()
+    {
+        var directory = UiConfigDirectory();
+        var cssPath = Path.Combine(directory, "theme.css");
+        var palettePath = Path.Combine(directory, "colors.json");
+        var css = File.Exists(cssPath) ? await File.ReadAllTextAsync(cssPath) : string.Empty;
+        if (css.Length > 262_144) throw new InvalidOperationException("The custom UI stylesheet cannot exceed 256 KB.");
+        Dictionary<string, string> palette = [];
+        if (File.Exists(palettePath))
+            palette = JsonSerializer.Deserialize<Dictionary<string, string>>(await File.ReadAllTextAsync(palettePath), JsonOptions) ?? [];
+        palette = palette.Where(item => UiPaletteKeys.Contains(item.Key) && IsHexColor(item.Value))
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase);
+        return new { Directory = directory, Css = css, Palette = palette };
+    }
+
+    private static async Task<object> SaveUiPaletteAsync(BridgeRequest request)
+    {
+        if (!request.Payload.TryGetProperty("colors", out var colors) || colors.ValueKind != JsonValueKind.Object)
+            throw new ArgumentException("Payload property 'colors' is required.");
+        var palette = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in colors.EnumerateObject())
+        {
+            if (!UiPaletteKeys.Contains(item.Name)) throw new ArgumentException($"Unknown UI color '{item.Name}'.");
+            var value = item.Value.GetString() ?? string.Empty;
+            if (!IsHexColor(value)) throw new ArgumentException($"UI color '{item.Name}' must use six-digit hex notation.");
+            palette[item.Name] = value.ToLowerInvariant();
+        }
+        if (palette.Count != UiPaletteKeys.Count) throw new ArgumentException("Every UI color must be supplied.");
+        var directory = UiConfigDirectory();
+        Directory.CreateDirectory(directory);
+        await File.WriteAllTextAsync(Path.Combine(directory, "colors.json"), JsonSerializer.Serialize(palette, JsonOptions));
+        return palette;
+    }
+
+    private static Task<object> ResetUiPaletteAsync()
+    {
+        var path = Path.Combine(UiConfigDirectory(), "colors.json");
+        if (File.Exists(path)) File.Delete(path);
+        return Task.FromResult<object>(new { reset = true });
+    }
+
+    private static string UiConfigDirectory()
+    {
+        var configRoot = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+        if (string.IsNullOrWhiteSpace(configRoot))
+            configRoot = OperatingSystem.IsMacOS()
+                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Library", "Application Support")
+                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
+        return Path.Combine(configRoot, "colorfinder", "ui");
+    }
+
+    private static bool IsHexColor(string value) => value.Length == 7 && value[0] == '#' && value[1..].All(Uri.IsHexDigit);
 
     private async Task<object> AssignColorAsync(BridgeRequest request)
     {

@@ -1,4 +1,4 @@
-const state = { snapshot: null, selectedPaths: new Set(), anchorIndex: -1, home: null, view: 'grid', pending: new Map(), colorFilter: null, query: '', preview:null };
+const state = { snapshot: null, selectedPaths: new Set(), anchorIndex: -1, home: null, view: 'grid', pending: new Map(), colorFilter: null, query: '', preview:null, uiPalette:{} };
 const entriesElement = document.querySelector('#entries');
 const contextMenu = document.querySelector('#context-menu');
 const appDialog = document.querySelector('#app-dialog');
@@ -41,6 +41,45 @@ function invoke(action, payload = {}) {
   });
 }
 
+async function loadCustomization() {
+  const customization = await invoke('ui.customization');
+  let style = document.querySelector('#custom-ui-skin');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'custom-ui-skin';
+    document.head.append(style);
+  }
+  style.textContent = customization.css;
+  state.uiPalette = customization.palette ?? {};
+  applyUiPalette(state.uiPalette);
+  document.documentElement.dataset.uiConfig = customization.directory;
+}
+
+function applyUiPalette(palette) {
+  let style = document.querySelector('#custom-ui-colors');
+  if (!style) { style = document.createElement('style'); style.id = 'custom-ui-colors'; document.head.append(style); }
+  const variables = Object.entries(palette).map(([name, value]) => `--${name}:${value};`).join(' ');
+  style.textContent = Object.keys(palette).length ? `
+    :root { ${variables} }
+    body { background:var(--bg)!important; color:var(--text)!important; }
+    [data-ui="toolbar"] { background:var(--surface)!important; }
+    [data-ui="sidebar"], [data-ui="info-panel"], .app-dialog, .context-menu { background:var(--surface)!important; color:var(--text)!important; }
+    button, .entry.selected, .location-link.active, .color-filter.active { background-color:var(--surface2)!important; }
+    .search-box, .breadcrumbs, .dialog-form input, .rule-row input, .rule-row select, .preview { background-color:var(--bg)!important; color:var(--text)!important; }
+    .entry.selected, .drop-target, input:focus { border-color:var(--accent)!important; }
+    [data-ui="toolbar"], [data-ui="sidebar"], [data-ui="info-panel"], .app-dialog, .context-menu, .breadcrumbs, .search-box, .dialog-form input, .rule-row input, .rule-row select, .preview, .picker-folders { border-color:var(--border)!important; }
+    aside h2, .info-list dt, .context-heading, .empty-state, .picker-empty, .dialog-form p { color:var(--muted)!important; }
+  ` : '';
+}
+
+function cssColorToHex(value) {
+  if (/^#[0-9a-f]{6}$/i.test(value)) return value.toLowerCase();
+  if (/^#[0-9a-f]{3}$/i.test(value)) return `#${[...value.slice(1)].map(part => part + part).join('')}`.toLowerCase();
+  const match = value.match(/\d+(?:\.\d+)?/g);
+  if (!match || match.length < 3) return '#000000';
+  return `#${match.slice(0, 3).map(part => Math.round(Number(part)).toString(16).padStart(2, '0')).join('')}`;
+}
+
 async function refresh(action, payload, options = {}) {
   try {
     const previousSelection = options.preserveSelection ? new Set(state.selectedPaths) : null;
@@ -71,6 +110,8 @@ function render() {
     const index = entries.indexOf(entry);
     const button = document.createElement('button');
     button.draggable = true;
+    button.dataset.ui = 'entry';
+    button.dataset.kind = entry.isDirectory ? 'directory' : 'file';
     button.dataset.path = entry.fullPath;
     button.className = `entry${state.selectedPaths.has(entry.fullPath) ? ' selected' : ''}`;
     button.title = entry.fullPath;
@@ -131,7 +172,7 @@ function render() {
   }), ...(visibleEntries.length ? [] : [emptyState()]));
   const colorButtons = colors.map(color => {
     const button = document.createElement('button');
-    button.className = 'swatch'; button.title = color.name;
+    button.className = 'swatch'; button.dataset.ui = 'tag-swatch'; button.title = color.name;
     button.style.setProperty('--swatch', color.hexColor);
     button.onclick = () => refresh('color.assign', { paths: [...state.selectedPaths], color: color.id }, { preserveSelection:true });
     return button;
@@ -197,6 +238,7 @@ function renderSidebar() {
 function renderLocations(selector, locations, icon) {
   const buttons = locations.map(location => {
     const button = document.createElement('button'); button.className = `location-link${location.path === state.snapshot.path ? ' active' : ''}`;
+    button.dataset.ui = 'location';
     button.innerHTML = `<span>${icon}</span><span></span>`; button.lastElementChild.textContent = location.name; button.title = location.path;
     button.onclick = () => refresh('navigation.open', { path:location.path });
     makeFileDropTarget(button, () => location.path);
@@ -310,16 +352,18 @@ function emptyState() {
 
 function renderSearchHeading() {
   const container = document.querySelector('#path');
-  const label = document.createElement('span'); label.className = 'breadcrumb'; label.textContent = state.snapshot.path;
+  const label = document.createElement('span'); label.className = 'breadcrumb'; label.dataset.ui = 'breadcrumb'; label.textContent = state.snapshot.path;
   container.replaceChildren(label);
 }
 
 function renderColorFilters(colors) {
   const all = document.createElement('button'); all.className = `color-filter${state.colorFilter ? '' : ' active'}`;
+  all.dataset.ui = 'color-filter';
   all.innerHTML = '<span title="All items">◌</span><span>All items</span>';
   all.onclick = () => { state.colorFilter = null; render(); };
   const buttons = colors.map(color => {
     const button = document.createElement('button'); button.className = `color-filter${state.colorFilter === color.id ? ' active' : ''}`;
+    button.dataset.ui = 'color-filter';
     button.innerHTML = '<span class="color-dot"></span><span></span>'; button.firstElementChild.style.setProperty('--swatch', color.hexColor); button.lastElementChild.textContent = color.name;
     button.onclick = () => { state.colorFilter = state.colorFilter === color.id ? null : color.id; render(); };
     return button;
@@ -341,6 +385,7 @@ function renderBreadcrumbs(path) {
   container.replaceChildren(...crumbs.map(crumb => {
     const button = document.createElement('button');
     button.className = 'breadcrumb';
+    button.dataset.ui = 'breadcrumb';
     button.textContent = crumb.label;
     button.title = crumb.path;
     button.onclick = () => refresh('navigation.open', { path: crumb.path });
@@ -529,6 +574,7 @@ async function loadPickerDirectory(path) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'picker-folder';
+    button.dataset.ui = 'folder-picker-entry';
     button.innerHTML = '<span>📁</span><span></span>';
     button.lastElementChild.textContent = directory.name;
     button.onclick = () => loadPickerDirectory(directory.fullPath).catch(showError);
@@ -637,20 +683,44 @@ searchInput.onkeydown = event => {
   render();
 };
 const settingsDialog = document.querySelector('#settings-dialog');
+settingsDialog.onclose = () => applyUiPalette(state.uiPalette);
 document.querySelector('#color-settings').onclick = () => {
   deletedRuleIds = [];
+  const paletteLabels = { bg:'Background', surface:'Panels', surface2:'Controls', text:'Text', muted:'Muted text', accent:'Accent', border:'Borders' };
+  const computed = getComputedStyle(document.documentElement);
+  const paletteRows = Object.entries(paletteLabels).map(([name, labelText]) => {
+    const label = document.createElement('label'); label.className = 'ui-color-setting'; label.dataset.ui = 'ui-color-setting'; label.dataset.variable = name;
+    label.innerHTML = '<input type="color"><span></span>';
+    label.querySelector('input').value = state.uiPalette[name] ?? cssColorToHex(computed.getPropertyValue(`--${name}`).trim());
+    label.querySelector('span').textContent = labelText;
+    label.querySelector('input').oninput = event => applyUiPalette({ ...state.uiPalette, ...Object.fromEntries([...document.querySelectorAll('.ui-color-setting')].map(row => [row.dataset.variable, row.querySelector('input').value])), [name]:event.target.value });
+    return label;
+  });
+  document.querySelector('#ui-palette').replaceChildren(...paletteRows);
   const rows = state.snapshot.colors.map(color => {
-    const label = document.createElement('label'); label.className = 'settings-row';
-    label.innerHTML = '<span class="color-dot"></span><input maxlength="32" required>';
-    label.firstElementChild.style.setProperty('--swatch', color.hexColor); label.lastElementChild.value = color.name; label.lastElementChild.dataset.color = color.id;
+    const label = document.createElement('label'); label.className = 'settings-row'; label.dataset.ui = 'tag-color-setting';
+    label.innerHTML = '<span class="color-dot"></span><input class="tag-hex" type="color" aria-label="Tag color"><input class="tag-name" maxlength="32" required aria-label="Tag name">';
+    label.querySelector('.color-dot').style.setProperty('--swatch', color.hexColor);
+    label.querySelector('.tag-hex').value = color.hexColor;
+    label.querySelector('.tag-name').value = color.name;
+    label.dataset.color = color.id;
     return label;
   });
   document.querySelector('#settings-colors').replaceChildren(...rows);
   document.querySelector('#rules-list').replaceChildren(...(state.snapshot.rules ?? []).map(createRuleRow));
   settingsDialog.showModal();
 };
+document.querySelector('#reset-ui-palette').onclick = async () => {
+  try {
+    await invoke('ui.resetPalette');
+    state.uiPalette = {};
+    applyUiPalette({});
+    settingsDialog.close();
+    document.querySelector('#color-settings').click();
+  } catch (error) { showError(error); }
+};
 function createRuleRow(rule = { id:'', extension:'', colorId:'blue', enabled:true, priority:0, type:'extension' }) {
-  const row = document.createElement('div'); row.className = 'rule-row'; row.dataset.id = rule.id;
+  const row = document.createElement('div'); row.className = 'rule-row'; row.dataset.id = rule.id; row.dataset.ui = 'automatic-color-rule';
   const options = state.snapshot.colors.map(color => `<option value="${color.id}"></option>`).join('');
   const types = [['extension','Extension'],['fileName','File name'],['path','Path'],['regularExpression','Regex'],['mimeType','MIME type'],['olderThanDays','Older than (days)'],['largerThanBytes','Larger than (size)']].map(([value,label]) => `<option value="${value}">${label}</option>`).join('');
   row.innerHTML = `<label class="rule-enabled-wrap" title="Enable this rule"><input class="rule-enabled" type="checkbox" aria-label="Enabled"></label><select class="rule-type" aria-label="Match type">${types}</select><input class="rule-extension" required maxlength="256" aria-label="Condition"><select class="rule-color" aria-label="Color">${options}</select><input class="rule-priority" type="number" value="0" title="Higher priority wins when rules overlap" aria-label="Priority"><button class="rule-delete" type="button" title="Delete rule">×</button>`;
@@ -669,7 +739,10 @@ document.querySelector('#settings-cancel').onclick = () => settingsDialog.close(
 document.querySelector('#settings-form').onsubmit = async event => {
   event.preventDefault();
   try {
-    for (const input of document.querySelectorAll('#settings-colors input')) await invoke('color.rename', { color:input.dataset.color, name:input.value });
+    const uiColors = Object.fromEntries([...document.querySelectorAll('.ui-color-setting')].map(row => [row.dataset.variable, row.querySelector('input').value]));
+    state.uiPalette = await invoke('ui.savePalette', { colors:uiColors });
+    applyUiPalette(state.uiPalette);
+    for (const row of document.querySelectorAll('#settings-colors .settings-row')) await invoke('color.customize', { color:row.dataset.color, name:row.querySelector('.tag-name').value, hexColor:row.querySelector('.tag-hex').value });
     for (const id of deletedRuleIds) await invoke('rules.delete', { id });
     for (const row of document.querySelectorAll('.rule-row')) await invoke('rules.save', { id:row.dataset.id, type:row.querySelector('.rule-type').value, extension:row.querySelector('.rule-extension').value, color:row.querySelector('.rule-color').value, enabled:row.querySelector('.rule-enabled').checked, priority:Number(row.querySelector('.rule-priority').value) });
     settingsDialog.close(); await refresh('filesystem.listDirectory', { path: state.snapshot.isSearch ? state.home : state.snapshot.path });
@@ -766,5 +839,6 @@ for (const view of ['grid', 'list']) document.querySelector(`#${view}-view`).onc
   render();
 };
 
+for (const element of document.querySelectorAll('[id]')) element.dataset.ui ??= element.id;
 makeFileDropTarget(entriesElement, () => state.snapshot.path);
-refresh('app.initialize');
+loadCustomization().catch(showError).finally(() => refresh('app.initialize'));

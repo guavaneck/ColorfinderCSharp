@@ -119,6 +119,28 @@ public sealed class JsonColorServiceTests : IDisposable
         Assert.Equal("#54a0ff", blue.HexColor);
     }
 
+    [Fact]
+    public async Task CustomTagNamesAndColorsPersistTogether()
+    {
+        var database = Path.Combine(_root, "colors.json");
+        await new JsonColorService(database).CustomizeColorAsync("blue", "Terminal Blue", "#00aaff");
+
+        var blue = Assert.Single(await new JsonColorService(database).GetColorTagsAsync(), color => color.Id == "blue");
+
+        Assert.Equal("Terminal Blue", blue.Name);
+        Assert.Equal("#00aaff", blue.HexColor);
+    }
+
+    [Theory]
+    [InlineData("blue")]
+    [InlineData("#12345")]
+    [InlineData("#xyzxyz")]
+    public async Task InvalidCustomTagColorsAreRejected(string hexColor)
+    {
+        var service = new JsonColorService(Path.Combine(_root, "colors.json"));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.CustomizeColorAsync("blue", "Blue", hexColor));
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("                                 ")]

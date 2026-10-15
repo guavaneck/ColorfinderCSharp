@@ -16,6 +16,13 @@ let
     stdenv.cc.cc.lib
     webkitgtk_4_1
   ] ++ gstreamerPlugins;
+  # GSettings schemas live one level below each package's normal share path.
+  # GTK's native dialogs (including <input type="color">) abort if these are
+  # not discoverable at runtime.
+  gsettingsDataDirs = [
+    "${pkgs.gtk3}/share/gsettings-schemas/${pkgs.gtk3.name}"
+    "${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}"
+  ];
 in
 pkgs.mkShell {
   packages = with pkgs; [
@@ -39,5 +46,6 @@ pkgs.mkShell {
     mkdir -p "$PWD/.tmp"
     export TMPDIR="$PWD/.tmp"
     export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath runtimeLibraries}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    export XDG_DATA_DIRS="${pkgs.lib.concatStringsSep ":" gsettingsDataDirs}''${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
   '';
 }
