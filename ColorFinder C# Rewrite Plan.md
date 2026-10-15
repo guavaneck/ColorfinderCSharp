@@ -1504,8 +1504,8 @@ Allow rule precedence and manual overrides.
 
 Linux:
 
-- [ ] Wayland testing
-- [ ] X11 testing
+- [x] Wayland testing — Photino 4 renders a blank/corrupt surface; use XWayland for now
+- [x] X11/XWayland testing
 - [x] Trash integration
 - [x] Open-with support
 - [x] Desktop file
