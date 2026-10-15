@@ -13,6 +13,8 @@ let activeDraggedPaths = [];
 let emptyDragImage = null;
 let dragBadge = null;
 let suppressDragClickUntil = 0;
+let dropHandledInThisWindow = false;
+let errorTimer = null;
 
 function receiveBridgeMessage(message) {
   let response;
@@ -43,7 +45,7 @@ async function refresh(action, payload, options = {}) {
   try {
     const previousSelection = options.preserveSelection ? new Set(state.selectedPaths) : null;
     closeContextMenu();
-    document.querySelector('#error').hidden = true;
+    hideError();
     state.snapshot = await invoke(action, payload);
     state.home ??= state.snapshot.path;
     if (previousSelection) {
@@ -52,9 +54,7 @@ async function refresh(action, payload, options = {}) {
     } else clearSelection();
     render();
   } catch (error) {
-    const alert = document.querySelector('#error');
-    alert.textContent = error.message;
-    alert.hidden = false;
+    showError(error);
   }
 }
 
@@ -83,6 +83,7 @@ function render() {
     button.onclick = event => { selectEntry(event, entry, index); loadSelectionPreview(); };
     button.ondragstart = event => {
       suppressDragClickUntil = Number.POSITIVE_INFINITY;
+      dropHandledInThisWindow = false;
       if (!state.selectedPaths.has(entry.fullPath)) {
         state.selectedPaths = new Set([entry.fullPath]);
         state.anchorIndex = index;
@@ -91,6 +92,7 @@ function render() {
       }
       const paths = [...state.selectedPaths];
       activeDraggedPaths = paths;
+      invoke('filesystem.beginDrag', { paths }).catch(showError);
       event.dataTransfer.effectAllowed = 'copyMove';
       event.dataTransfer.setData('application/x-colorfinder-paths', JSON.stringify(paths));
       event.dataTransfer.setData('text/uri-list', paths.map(fileUri).join('\r\n'));
@@ -104,6 +106,8 @@ function render() {
       suppressDragClickUntil = Date.now() + 300;
       hideDragBadge();
       for (const element of entriesElement.querySelectorAll('.drop-target')) element.classList.remove('drop-target');
+      if (!dropHandledInThisWindow)
+        setTimeout(() => refresh('filesystem.listDirectory', { path:state.snapshot.path }), 200);
     };
     if (entry.isDirectory) {
       makeFileDropTarget(button, () => entry.fullPath);
@@ -209,7 +213,9 @@ function makeFileDropTarget(element, getDestination) {
     event.dataTransfer.dropEffect = isColorFinderDrag(event.dataTransfer) ? 'move' : 'copy';
     element.classList.add('drop-target');
   };
-  element.ondragleave = () => element.classList.remove('drop-target');
+  element.ondragleave = event => {
+    if (!(event.relatedTarget instanceof Node) || !element.contains(event.relatedTarget)) element.classList.remove('drop-target');
+  };
   element.ondrop = event => {
     if (!hasFileDrag(event.dataTransfer)) return;
     event.preventDefault();
@@ -257,10 +263,16 @@ async function loadSelectionPreview() {
 
 async function transferDroppedItems(event, destination) {
   try {
+    dropHandledInThisWindow = true;
     const storedPaths = event.dataTransfer.getData('application/x-colorfinder-paths');
     const internalPaths = storedPaths ? JSON.parse(storedPaths) : activeDraggedPaths;
-    const isInternal = isColorFinderDrag(event.dataTransfer) || event.dataTransfer.getData('text/plain').startsWith(colorFinderDragHeader);
-    const paths = (internalPaths.length ? internalPaths : externalDroppedPaths(event.dataTransfer)).filter(path => path !== destination);
+    let isInternal = isColorFinderDrag(event.dataTransfer) || event.dataTransfer.getData('text/plain').startsWith(colorFinderDragHeader);
+    let paths = internalPaths.length ? internalPaths : externalDroppedPaths(event.dataTransfer);
+    if (!paths.length) {
+      paths = await invoke('filesystem.draggedPaths');
+      isInternal = paths.length > 0;
+    }
+    paths = paths.filter(path => path !== destination);
     if (!paths.length) return;
     await refresh(isInternal ? 'filesystem.move' : 'filesystem.copy', { paths, destination });
   } catch (error) { showError(error); }
@@ -393,6 +405,14 @@ function showError(error) {
   const alert = document.querySelector('#error');
   alert.textContent = error.message;
   alert.hidden = false;
+  clearTimeout(errorTimer);
+  errorTimer = setTimeout(hideError, 2000);
+}
+
+function hideError() {
+  clearTimeout(errorTimer);
+  errorTimer = null;
+  document.querySelector('#error').hidden = true;
 }
 
 function selectedEntries() {

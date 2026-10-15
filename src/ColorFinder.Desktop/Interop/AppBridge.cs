@@ -11,6 +11,7 @@ namespace ColorFinder.Desktop.Interop;
 public sealed class AppBridge(IFileSystemService fileSystem, IColorService colors, IColorRuleService rules, NavigationService navigation, IPlatformService platform)
 {
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
+    private static readonly string DragHandoffPath = Path.Combine(Path.GetTempPath(), $"colorfinder-drag-{Environment.UserName}.json");
 
     private static JsonSerializerOptions CreateJsonOptions()
     {
@@ -52,6 +53,8 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
         "filesystem.open" => OpenFile(request),
         "filesystem.applications" => platform.GetApplications(RequiredString(request, "path")),
         "filesystem.openWith" => OpenFileWith(request),
+        "filesystem.beginDrag" => await BeginDragAsync(request),
+        "filesystem.draggedPaths" => await GetDraggedPathsAsync(),
         "filesystem.preview" => await PreviewAsync(request),
         "filesystem.createDirectory" => await CreateDirectoryAsync(request),
         "filesystem.rename" => await RenameAsync(request),
@@ -235,6 +238,29 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
         };
     }
 
+    private static async Task<object> BeginDragAsync(BridgeRequest request)
+    {
+        var paths = RequiredPaths(request).Select(Path.GetFullPath).Where(path => File.Exists(path) || Directory.Exists(path)).ToArray();
+        var handoff = new DragHandoff(DateTimeOffset.UtcNow, paths);
+        var temporaryPath = DragHandoffPath + $".{Environment.ProcessId}.tmp";
+        await File.WriteAllTextAsync(temporaryPath, JsonSerializer.Serialize(handoff, JsonOptions));
+        File.Move(temporaryPath, DragHandoffPath, true);
+        return new { registered = paths.Length };
+    }
+
+    private static async Task<string[]> GetDraggedPathsAsync()
+    {
+        try
+        {
+            if (!File.Exists(DragHandoffPath)) return [];
+            var handoff = JsonSerializer.Deserialize<DragHandoff>(await File.ReadAllTextAsync(DragHandoffPath), JsonOptions);
+            if (handoff is null || DateTimeOffset.UtcNow - handoff.CreatedAt > TimeSpan.FromSeconds(15)) return [];
+            return handoff.Paths.Where(path => File.Exists(path) || Directory.Exists(path)).ToArray();
+        }
+        catch (IOException) { return []; }
+        catch (JsonException) { return []; }
+    }
+
     private static string RequiredString(BridgeRequest request, string name) =>
         request.Payload.TryGetProperty(name, out var property) && !string.IsNullOrWhiteSpace(property.GetString())
             ? property.GetString()!
@@ -261,4 +287,6 @@ public sealed class AppBridge(IFileSystemService fileSystem, IColorService color
 
     private static int OptionalInt(BridgeRequest request, string name) =>
         request.Payload.TryGetProperty(name, out var property) && property.TryGetInt32(out var value) ? value : 0;
+
+    private sealed record DragHandoff(DateTimeOffset CreatedAt, string[] Paths);
 }
